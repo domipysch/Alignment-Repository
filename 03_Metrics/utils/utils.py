@@ -1,0 +1,133 @@
+from typing import List, Dict
+import numpy as np
+import pandas as pd
+import scanpy as sc
+
+
+def create_adata_object(df: pd.DataFrame) -> sc.AnnData:
+    return sc.AnnData(X=df.T.values, obs=pd.DataFrame(index=df.columns), var=pd.DataFrame(index=df.index))
+
+
+def cohens_d(a: np.ndarray, b: np.ndarray) -> float:
+    """
+    Compute Cohen's d effect size between two 1D numpy arrays.
+    """
+    if a.size < 1 or b.size < 1:
+        return 0.0
+    na, nb = a.size, b.size
+    ma, mb = a.mean(), b.mean()
+    sa, sb = np.std(a), np.std(b)
+
+    denom = ( (na - 1) * (sa ** 2) + (nb - 1) * (sb ** 2) ) / (na + nb - 2)
+    pooled_sd = np.sqrt(denom) if denom > 0 else 0.0
+    if pooled_sd == 0:
+        return 0.0
+    return float((ma - mb) / pooled_sd)
+
+
+def compute_norm_per_vector(vectors_df: pd.DataFrame) -> np.ndarray:
+    norms = vectors_df.apply(lambda row: np.sqrt((row ** 2).sum()), axis=1)
+    return norms.astype(float).to_numpy()
+
+
+def compute_log_norm_per_vector(vectors_df: pd.DataFrame) -> np.ndarray:
+    arr = compute_norm_per_vector(vectors_df)
+    if arr.size == 0:
+        return arr
+    # log(0) behandeln -> -inf vermeiden, setze zu 0
+    with np.errstate(divide="ignore"):
+        log_arr = np.where(arr <= 0, 0.0, np.log(arr))
+    return log_arr
+
+
+def compute_vector_metrics(vectors_df: pd.DataFrame) -> Dict[str, float]:
+    """
+    For a GEP matrix, compute basic metrics per gene.
+    Args:
+        vectors_df: GEP matrix (genes x spots/cells) as pandas DataFrame
+    Returns:
+        Dict with basic statistics of vector norms.
+    """
+    arr = compute_norm_per_vector(vectors_df)
+    log_arr = compute_log_norm_per_vector(vectors_df)
+
+    def safe_min(a):
+        return float(np.min(a)) if a.size > 0 else 0.0
+
+    def safe_max(a):
+        return float(np.max(a)) if a.size > 0 else 0.0
+
+    def safe_mean(a):
+        return float(np.mean(a)) if a.size > 0 else 0.0
+
+    def safe_median(a):
+        return float(np.median(a)) if a.size > 0 else 0.0
+
+    def safe_std(a):
+        if a.size <= 1:
+            return 0.0
+        return float(np.std(a, ddof=1))
+
+    return {
+        "min_norm": safe_min(arr),
+        "max_norm": safe_max(arr),
+        "mean_norm": safe_mean(arr),
+        "median_norm": safe_median(arr),
+        "std_norm": safe_std(arr),
+        "log_mean_norm": safe_mean(log_arr),
+        "log_std_norm": safe_std(log_arr),
+    }
+
+
+def compute_basic_metrics_for_gene_groups(
+    gep: pd.DataFrame,
+    marker_genes: List[str],
+    non_marker_genes: List[str],
+    include_norm_values: bool = False,
+) -> Dict[str, float]:
+    """
+    Genes x Cells/Spots.
+    First columns are gene IDs. First row are cell/spot IDs.
+    Args:
+        gep: GEP matrix (genes x spots/cells) as pandas DataFrame
+        marker_genes: List of marker gene names
+        non_marker_genes: List of non-marker gene names
+        include_norm_values: Whether to also return all norm values as lists
+    Returns: Dict with basic statistics for both gene groups
+    """
+
+    # Get spot vectors per genes for marker and non-marker genes
+    marker_vectors = gep.loc[gep.index.astype(str).str.strip().isin(marker_genes)]
+    non_marker_vectors = gep.loc[gep.index.astype(str).str.strip().isin(non_marker_genes)]
+
+    # Compute basic metrics for both groups
+    marker_metrics = compute_vector_metrics(marker_vectors)
+    non_marker_metrics = compute_vector_metrics(non_marker_vectors)
+
+    # Compute norms and log norms as numpy-arrays
+    norms_marker = compute_norm_per_vector(marker_vectors)
+    norms_non_marker = compute_norm_per_vector(non_marker_vectors)
+    log_norms_marker = compute_log_norm_per_vector(marker_vectors)
+    log_norms_non_marker = compute_log_norm_per_vector(non_marker_vectors)
+    cohen_d_norm = cohens_d(norms_marker, norms_non_marker)
+    cohen_d_log_norm = cohens_d(log_norms_marker, log_norms_non_marker)
+
+    result_metrics: Dict[str, float] = {
+        # counts
+        "n_marker_vectors": len(norms_marker),
+        "n_non_marker_vectors": len(norms_non_marker),
+        # marker group metrics (prefix marker_)
+        **{f"marker_{k}": float(v) for k, v in marker_metrics.items()},
+        # non-marker group metrics (prefix non_marker_)
+        **{f"non_marker_{k}": float(v) for k, v in non_marker_metrics.items()},
+        # Cohen's d
+        "cohen_d_norm": cohen_d_norm,
+        "cohen_d_log_norm": cohen_d_log_norm,
+    }
+
+    if include_norm_values:
+        result_metrics["marker_norms"] = norms_marker.tolist()
+        result_metrics["non_marker_norms"] = norms_non_marker.tolist()
+
+    return result_metrics
+

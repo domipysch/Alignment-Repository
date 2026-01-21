@@ -3,7 +3,6 @@ import pandas as pd
 import anndata as ad
 
 
-# Leave non-numeric values unchanged
 def load_sc_adata(dataset_folder: str, cell_type_key: str = "cellType") -> ad.AnnData:
     """
     Load single-cell data from dataset folder into an AnnData object.
@@ -11,7 +10,7 @@ def load_sc_adata(dataset_folder: str, cell_type_key: str = "cellType") -> ad.An
         dataset_folder: Absolute path to dataset folder
         cell_type_key: Key in scData_cells.csv file to read cell type annotations from
     Returns:
-        ad.AnnData: Single-cell AnnData object
+        ad.AnnData: Single-cell AnnData object (C x G)
     """
     # Cells = Rows, Genes = Columns
     df = pd.read_csv(os.path.join(dataset_folder, "scData_GEP.csv"), index_col=0)
@@ -29,7 +28,7 @@ def load_st_adata(dataset_folder: str) -> ad.AnnData:
     Args:
         dataset_folder: Absolute path to dataset folder
     Returns:
-        ad.AnnData: ST AnnData object
+        ad.AnnData: ST AnnData object (S x G)
     """
     # Spots = Rows, Genes = Columns
     df = pd.read_csv(os.path.join(dataset_folder, "stData_GEP.csv"), index_col=0)

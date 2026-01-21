@@ -35,12 +35,12 @@ if (! mapping_mode %in% c("deterministic-mapping", "probabilistic-mapping")) {
 
 # ---- Load input data ----
 ref_counts <- read.csv(file.path(dataset_folder, "scData_GEP.csv"),
-                       header = TRUE, row.names = 1, check.names = FALSE, stringsAsFactors = FALSE)
+                       header = TRUE, row.names = 1, check.names = FALSE, stringsAsFactors = FALSE)  # G x C
 ref_meta   <- read.csv(file.path(dataset_folder, "scData_Cells.csv"),
                        header = TRUE, stringsAsFactors = FALSE, check.names = FALSE)
 
 srt_counts <- read.csv(file.path(dataset_folder, "stData_GEP.csv"),
-                       header = TRUE, row.names = 1, check.names = FALSE, stringsAsFactors = FALSE)
+                       header = TRUE, row.names = 1, check.names = FALSE, stringsAsFactors = FALSE)  # G x S
 srt_coords <- read.csv(file.path(dataset_folder, "stData_Spots.csv"),
                        header = TRUE, row.names = 1, stringsAsFactors = FALSE, check.names = FALSE)
 
@@ -51,10 +51,10 @@ if (! cellTypeKey %in% colnames(ref_meta)) {
 }
 
 # ---- Build reference centroids per cell type (NO gene filtering here) ----
-# ref_counts: genes x cells  => want to compute average expression for each cell type
+# ref_counts => want to compute average expression for each cell type
 
 # transpose to cells x genes for easier aggregation
-cells_by_gene <- t(as.matrix(ref_counts))  # cells x genes
+cells_by_gene <- t(as.matrix(ref_counts))  # C x G
 cell_types <- as.character(ref_meta[[cellTypeKey]])
 celltype_levels <- unique(cell_types)
 ref_centroids_list <- lapply(celltype_levels, function(ct) {
@@ -66,7 +66,7 @@ ref_centroids_list <- lapply(celltype_levels, function(ct) {
     colMeans(cells_by_gene[idx, , drop = FALSE])
   }
 })
-ref_centroids <- do.call(rbind, ref_centroids_list) # celltype x gene
+ref_centroids <- do.call(rbind, ref_centroids_list)  # T x G
 rownames(ref_centroids) <- as.character(celltype_levels)
 colnames(ref_centroids) <- colnames(cells_by_gene)
 dim(ref_centroids)
@@ -79,13 +79,13 @@ dot <- create.DOT(dot.srt, dot.ref)
 # Run selected resolution
 if (mode == "HSO") {
   cat("Running DOT in high-resolution mode (HSO)...\n")
-  dot <- run.DOT.highresolution(dot)
+  dot <- run.DOT.highresolution(dot)  # dot@weights   : S x T
 
   # If requested, convert probabilistic weights to deterministic (one-hot per spot)
   if (!is.null(mapping_mode) && identical(mapping_mode, "deterministic-mapping")) {
     cat("Applying deterministic mapping: converting dot@weights to one-hot per spot...\n")
     # ensure numeric matrix
-    weights_mat <- as.matrix(dot@weights)
+    weights_mat <- as.matrix(dot@weights)  # S x T
     # compute finite-value mask per entry
     finite_mask <- is.finite(weights_mat)
     # replace non-finite entries with -Inf for safe argmax computation
@@ -95,7 +95,7 @@ if (mode == "HSO") {
     # If all entries are -Inf (no finite values), we'll handle below to set row to zeros.
     argmax_idx <- max.col(weights_repl, ties.method = "first")
     # build one-hot matrix
-    # one_hot <- matrix(0, nrow = nrow(weights_mat), ncol = ncol(weights_mat))
+    # one_hot: S x T
     one_hot <- matrix(0, nrow = nrow(weights_mat), ncol = ncol(weights_mat),
                   dimnames = dimnames(weights_mat))
     one_hot[cbind(seq_len(nrow(weights_mat)), argmax_idx)] <- 1
@@ -113,18 +113,19 @@ if (mode == "HSO") {
 } else {
   cat("Running DOT in low-resolution mode (LSO)...\n")
   dot <- run.DOT.lowresolution(dot, ratios_weight = 0, max_spot_size = 20, verbose = FALSE)
+  # dot@weights   : S x T
 }
 
 
 # Now compute gene x spot reconstructed expression:
-# ref_centroids : celltype x gene
-# dot@weights   : spots x celltype
-expr_genes_by_spots <- t(ref_centroids) %*% t(dot@weights)  # genes x spots (G x S)
+# ref_centroids : T x G
+# dot@weights   : S x T
+expr_genes_by_spots <- t(ref_centroids) %*% t(dot@weights)  # G x S
 
 # Convert to numeric matrix and set names
 expr_genes_by_spots <- as.matrix(expr_genes_by_spots)
 rownames(expr_genes_by_spots) <- colnames(ref_centroids)   # gene names
-colnames(expr_genes_by_spots) <- rownames(dot@weights)           # spot IDs
+colnames(expr_genes_by_spots) <- rownames(dot@weights)     # spot IDs
 dim(expr_genes_by_spots)
 
 # Determine output file path (use output_path if provided, otherwise default location)
@@ -140,7 +141,7 @@ if (!dir.exists(out_dir)) {
   dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 }
 
-# ---- Write CSV: first column spot IDs, first row header gene names, top-left "GEP" ----
+# ---- Write CSV (G x S): first column spot IDs, first row header gene names, top-left "GEP" ----
 out_df <- data.frame(GEP = rownames(expr_genes_by_spots),
                      expr_genes_by_spots,
                      check.names = FALSE, stringsAsFactors = FALSE)

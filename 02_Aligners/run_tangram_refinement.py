@@ -37,13 +37,13 @@ def tangram_refinement_align_data(
     assert os.path.isdir(dataset_folder), f"Dataset folder not found: {dataset_folder}"
 
     logger.info("Load data")
-    adata_sc = load_sc_adata(dataset_folder, cell_type_key=cell_type_key)
-    adata_st = load_st_adata(dataset_folder)
+    adata_sc = load_sc_adata(dataset_folder, cell_type_key=cell_type_key)  # C x G
+    adata_st = load_st_adata(dataset_folder)  # S x G
     logger.info("Data loaded")
     logger.info(f"Single Cell Data: {adata_sc.n_obs} cells x {adata_sc.n_vars} genes")
     logger.info(f"Spatial Data: {adata_st.n_obs} spots x {adata_st.n_vars} genes")
 
-    # Step 0 (optional): Compute marker genes
+    # Step 1 (optional): Compute marker genes (speeds up mapping)
     if compute_marker_genes:
         logger.info("Define marker genes")
         adata_sc_copy = adata_sc.copy()
@@ -56,9 +56,10 @@ def tangram_refinement_align_data(
         sc.pp.normalize_total(adata_sc_copy)
         adata_sc_copy.X = np.log1p(adata_sc_copy.X)
 
+        # Create list of names of marker genes
         sc.tl.rank_genes_groups(adata_sc_copy, groupby="cell_subclass", use_raw=False)
         markers_df = pd.DataFrame(adata_sc_copy.uns["rank_genes_groups"]["names"]).iloc[0:100, :]
-        markers = list(np.unique(markers_df.melt().value.values))
+        markers: list[str] = list(np.unique(markers_df.melt().value.values))
 
     if normalize_and_log:
         # Normalize & log-transform gene expression and spatial data
@@ -68,14 +69,16 @@ def tangram_refinement_align_data(
         adata_sc.X = np.log1p(adata_sc.X)
         adata_st.X = np.log1p(adata_st.X)
 
-    # Step 1: Tangram pre-processing
-    logger.info("Pre-process data with Tangram")
+    # Step 2: Tangram pre-processing
+    # (see https://github.com/broadinstitute/Tangram/blob/master/tangram/mapping_utils.py)
     if compute_marker_genes:
+        logger.info(f"Pre-process data with Tangram with {len(markers)} marker genes")
         tg.pp_adatas(adata_sc, adata_st, genes=markers)
     else:
+        logger.info(f"Pre-process data with Tangram with all genes as marker genes")
         tg.pp_adatas(adata_sc, adata_st, genes=None)
 
-    # Step 2: Mapping to space
+    # Step 3: Mapping
     logger.info("Map cells to spots with Tangram")
     if map_clusters:
         ad_map = tg.map_cells_to_space(
@@ -91,7 +94,9 @@ def tangram_refinement_align_data(
             lambda_neighborhood_g1=0.99,
             lambda_getis_ord=0.71,
             lambda_ct_islands=0.17
-        )
+        )  # T x S
+        assert ad_map.n_obs == len(adata_sc.obs['cell_subclass'].unique())
+        assert ad_map.n_vars == adata_st.n_obs
     else:
         ad_map = tg.map_cells_to_space(
             adata_sc,
@@ -105,25 +110,33 @@ def tangram_refinement_align_data(
             lambda_neighborhood_g1=0.99,
             lambda_getis_ord=0.71,
             lambda_ct_islands=0.17
-        )
+        )  # C x S
+        assert ad_map.n_obs == adata_sc.n_obs
+        assert ad_map.n_vars == adata_st.n_obs
 
-    # Step 3 (optional): Apply one-hot encoding to mapping
+    # Step 4 (optional): Apply one-hot encoding to mapping: Only one cell / cell type per spot
     if deterministic_mapping:
+        # For each column (spot) in ad_map, set the max value to 1 and all others to 0 (map spot to exactly one cell)
         if issparse(ad_map.X):
             mat = ad_map.X.toarray()
         else:
             mat = ad_map.X.copy()
-        argmax_idx = np.argmax(mat, axis=1)
+        argmax_idx = np.argmax(mat, axis=0)  # for each spot (column), index of max cell / cell type
         one_hot = np.zeros_like(mat, dtype=float)
         one_hot[np.arange(mat.shape[0]), argmax_idx] = 1.0
         ad_map.X = one_hot
 
-    # Step 4: Compute Z' out of the mapping (expected gene expression per spot, scRNA data weighted by mapping)
+    # Step 5: Compute Z' out of the mapping (expected gene expression per spot, scRNA data weighted by mapping)
     ad_ge = tg.project_genes(
         adata_map=ad_map,
         adata_sc=adata_sc,
         cluster_label="cell_subclass" if map_clusters else None
-    )
+    )  # S x G
+
+    # Transpose to G x S
+    ad_ge = ad_ge.transpose()  # now G x S
+    assert ad_ge.n_obs == adata_sc.n_vars
+    assert ad_ge.n_vars == adata_st.n_obs
 
     # Export ad_ge to CSV
     # - Rows: Genes
@@ -135,17 +148,12 @@ def tangram_refinement_align_data(
         expr = ad_ge.X
 
     # Check: Rows = Genes, Columns = Spots
-    assert expr.T.shape == (adata_sc.n_vars, adata_st.n_obs), "dims passen nicht"
+    assert expr.shape == (adata_sc.n_vars, adata_st.n_obs), "dims passen nicht"
 
-    df = pd.DataFrame(expr.T, index=list(s.upper() for s in ad_ge.var_names), columns=ad_ge.obs_names)
+    df = pd.DataFrame(expr, index=list(s.upper() for s in ad_ge.obs_names), columns=ad_ge.var_names)
     df_formatted = df.map(fmt_nonzero_4)
     df_formatted.to_csv(output_path, index=True, index_label="GEP")  # "GEP" in cell 0,0
     logger.info(f"Saved tangram GEP to {output_path}")
-
-    # Step 4.2: Optional: which cell types are present in spots (left commented)
-    # tg.project_cell_annotations(ad_map, adata_st, annotation="cell_subclass")
-    # annotation_list = list(pd.unique(adata_sc.obs['cell_subclass']))
-    # tg.plot_cell_annotation_sc(adata_st, annotation_list, perc=0.02)
 
 
 if __name__ == "__main__":

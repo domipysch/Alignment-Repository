@@ -337,32 +337,33 @@ def main(dataset: str, results_folder_name: str, metrics_folder_name: str, metho
     #     show=False
     # )
     #
-    # # Crate some diagrams on z1 metrics
-    # create_norms_histograms(
-    #     res,
-    #     out_path=Path(dataset) / metrics_folder_name / method / "z1" / "norms_histogram.png",
-    #     show=False,
-    #     bins=100
-    # )
-    #
-    # create_log_norms_histograms(
-    #     res,
-    #     out_path=Path(dataset) / metrics_folder_name / method / "z1" / "log_norms_histogram.png",
-    #     show=False,
-    #     bins=100
-    # )
-    #
-    # create_norms_boxplots(
-    #     res,
-    #     out_path=Path(dataset) / metrics_folder_name / method / "z1" / "norms_boxplot.png",
-    #     show=False
-    # )
-    #
-    # create_log_norms_boxplots(
-    #     res,
-    #     out_path=Path(dataset) / metrics_folder_name / method / "z1" / "log_norms_boxplot.png",
-    #     show=False
-    # )
+
+    # Crate some diagrams on z1 metrics
+    create_norms_histograms(
+        res,
+        out_path=Path(dataset) / metrics_folder_name / method / "z1" / "norms_histogram.png",
+        show=False,
+        bins=100
+    )
+
+    create_log_norms_histograms(
+        res,
+        out_path=Path(dataset) / metrics_folder_name / method / "z1" / "log_norms_histogram.png",
+        show=False,
+        bins=100
+    )
+
+    create_norms_boxplots(
+        res,
+        out_path=Path(dataset) / metrics_folder_name / method / "z1" / "norms_boxplot.png",
+        show=False
+    )
+
+    create_log_norms_boxplots(
+        res,
+        out_path=Path(dataset) / metrics_folder_name / method / "z1" / "log_norms_boxplot.png",
+        show=False
+    )
 
 
 if __name__ == "__main__":

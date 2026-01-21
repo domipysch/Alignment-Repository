@@ -103,20 +103,21 @@ if __name__ == "__main__":
     parser.add_argument('-d', '--dataset', type=str, help='Path to dataset folder', required=True)
     args = parser.parse_args()
 
-    methods = ["tangram", "tangram_non-det", "dot", "dot_non-det", "tacco", "tacco_non-det"]
+    # methods = ["tangram", "tangram_non-det", "dot", "dot_non-det", "tacco", "tacco_non-det"]
+    methods = ["tangram", "tangram_non-det"]
     result_folders = ["results_cell", "results_cellType", "results_cellTypeMinor"]
     metric_folders = ["metrics_cell", "metrics_cellType", "metrics_cellTypeMinor"]
 
     combined_boxplot(
         [
-            Path(args.dataset) / "metrics_cell" / "tangram" / "z4" / "knn" / "permutation_test.json",
-            Path(args.dataset) / "metrics_cellTypeMinor" / "tangram" / "z4" / "knn" / "permutation_test.json",
-            Path(args.dataset) / "metrics_cellType" / "tangram" / "z4" / "knn" / "permutation_test.json",
-            Path(args.dataset) / "metrics_cell" / "tangram_non-det" / "z4" / "knn" / "permutation_test.json",
-            Path(args.dataset) / "metrics_cellTypeMinor" / "tangram_non-det" / "z4" / "knn" / "permutation_test.json",
-            Path(args.dataset) / "metrics_cellType" / "tangram_non-det" / "z4" / "knn" / "permutation_test.json",
+            Path(args.dataset) / "metrics_cell" / "tangram" / "z3" / "permutation_test" / "permutation_test_per_gene.json",
+            Path(args.dataset) / "metrics_cellTypeMinor" / "tangram" / "z3" / "permutation_test" / "permutation_test_per_gene.json",
+            Path(args.dataset) / "metrics_cellType" / "tangram" / "z3" / "permutation_test" / "permutation_test_per_gene.json",
+            Path(args.dataset) / "metrics_cell" / "tangram_non-det" / "z3" / "permutation_test" / "permutation_test_per_gene.json",
+            Path(args.dataset) / "metrics_cellTypeMinor" / "tangram_non-det" / "z3" / "permutation_test" / "permutation_test_per_gene.json",
+            Path(args.dataset) / "metrics_cellType" / "tangram_non-det" / "z3" / "permutation_test" / "permutation_test_per_gene.json",
         ],
-        Path(args.dataset) / "metrics_overall" / "z4_permutation_test-tangram.png",
+        Path(args.dataset) / "metrics_overall" / "z3_permutation_test-tangram.png",
         labels=[
             "Cell - det.",
             "Minor cell state - det.",

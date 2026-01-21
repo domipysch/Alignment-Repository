@@ -620,7 +620,7 @@ def main(dataset_folder: str, results_folder_name: str, metrics_folder_name: str
     adata_predicted_z.obsm['coords'] = df_coords.loc[adata_z.obs_names, ['cArray0', 'cArray1']].to_numpy()
 
     # Compute and store cossim per gene in adata_predicted_z.var
-    compute_metrics_per_gene(adata_z, adata_predicted_z)
+    compute_metrics_per_gene(adata_z, adata_predicted_z, save_cossim_json=result_cossim_per_gene_json)
 
     generate_spatial_distribution_plots_for_some_genes(adata_z, adata_predicted_z, result_folder_spatial_per_gene)
 

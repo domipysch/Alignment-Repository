@@ -81,12 +81,12 @@ def main(paths_to_jsons: list[str], labls: list[str], title: str, output_path: s
 if __name__ == "__main__":
 
     paths = [
-        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/03_MouseSSP/metrics_cell/tangram/z4/knn/cossim.json",
-        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/03_MouseSSP/metrics_cellTypeMinor/tangram/z4/knn/cossim.json",
-        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/03_MouseSSP/metrics_cellType/tangram/z4/knn/cossim.json",
-        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/03_MouseSSP/metrics_cell/tangram_non-det/z4/knn/cossim.json",
-        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/03_MouseSSP/metrics_cellTypeMinor/tangram_non-det/z4/knn/cossim.json",
-        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/03_MouseSSP/metrics_cellType/tangram_non-det/z4/knn/cossim.json",
+        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_HumanBreastCancer_CID4465/metrics_cell/tangram/z4/knn/cossim.json",
+        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_HumanBreastCancer_CID4465/metrics_cellTypeMinor/tangram/z4/knn/cossim.json",
+        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_HumanBreastCancer_CID4465/metrics_cellType/tangram/z4/knn/cossim.json",
+        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_HumanBreastCancer_CID4465/metrics_cell/tangram_non-det/z4/knn/cossim.json",
+        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_HumanBreastCancer_CID4465/metrics_cellTypeMinor/tangram_non-det/z4/knn/cossim.json",
+        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_HumanBreastCancer_CID4465/metrics_cellType/tangram_non-det/z4/knn/cossim.json",
     ]
 
     labels = [
@@ -98,12 +98,10 @@ if __name__ == "__main__":
         "Major cell state - prob.",
     ]
 
-    print(json.dumps(compute_medians(paths, labels), indent=4))
-
-    out_path = "/Users/domi/Dev/MPA_Workspace/MPA_DATA/03_MouseSSP/metrics_overall/z4-cossim-tangram.jpg"
+    out_path = "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_HumanBreastCancer_CID4465/metrics_overall/z4-cossim-tangram.jpg"
     main(
         paths,
         labels,
-        "LSO Data - TACCO",
+        "HSO Data - Tangram",
         output_path=out_path
     )

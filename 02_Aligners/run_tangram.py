@@ -144,6 +144,7 @@ def tangram_align_data(
     assert expr.shape == (adata_sc.n_vars, adata_st.n_obs), "dims passen nicht"
 
     # Step 6: Write CSV
+    logger.info(f"Write result GEP to CSV: {output_path}")
     df = pd.DataFrame(expr, index=list(s.upper() for s in ad_ge.obs_names), columns=ad_ge.var_names)
     df_formatted = df.map(fmt_nonzero_4)
     df_formatted.to_csv(output_path, index=True, index_label="GEP")  # "GEP" in cell 0,0
@@ -166,27 +167,27 @@ if __name__ == "__main__":
     tangram_align_data(
         args.dataset,
         normalize_and_log=False,
-        deterministic_mapping=True,
-        compute_marker_genes=False,
+        deterministic_mapping=False,
+        compute_marker_genes=True,
         map_clusters=False,
         cell_type_key="cellType",
-        output_path=os.path.join(args.dataset, "results_cell", "tangram_GEP.csv")
+        output_path=os.path.join(args.dataset, "results_cell", "tangram_non-det_GEP.csv")
     )
     tangram_align_data(
         args.dataset,
         normalize_and_log=False,
-        deterministic_mapping=True,
-        compute_marker_genes=False,
+        deterministic_mapping=False,
+        compute_marker_genes=True,
         map_clusters=True,
         cell_type_key="cellType",
-        output_path=os.path.join(args.dataset, "results_cellType", "tangram_GEP.csv")
+        output_path=os.path.join(args.dataset, "results_cellType", "tangram_non-det_GEP.csv")
     )
     tangram_align_data(
         args.dataset,
         normalize_and_log=False,
-        deterministic_mapping=True,
-        compute_marker_genes=False,
+        deterministic_mapping=False,
+        compute_marker_genes=True,
         map_clusters=True,
         cell_type_key="cellTypeMinor",
-        output_path=os.path.join(args.dataset, "results_cellTypeMinor", "tangram_GEP.csv")
+        output_path=os.path.join(args.dataset, "results_cellTypeMinor", "tangram_non-det_GEP.csv")
     )

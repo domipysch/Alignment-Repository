@@ -201,7 +201,7 @@ def add_p_value_to_json(json_path):
 
 
 def main(dataset_folder: str, results_folder_name: str, metrics_folder_name: str, method: str):
-    logging.info("Compute permutation test for z3 for dataset:", dataset_folder, "folder:", results_folder_name, "method:", method)
+    logging.info(f"Compute permutation test for z3 for dataset: {dataset_folder}, folder: {results_folder_name}, method: {method}")
     result_file = Path(dataset_folder) / results_folder_name / f"{method}_GEP.csv"
 
     result_folder_permutation = Path(dataset_folder) / metrics_folder_name / method / "z3" / "permutation_test"
@@ -232,7 +232,8 @@ if __name__ == "__main__":
     parser.add_argument('-d', '--dataset', type=str, help='Path to dataset folder')
     args = parser.parse_args()
 
-    methods = ["tangram", "tangram_non-det", "dot", "dot_non-det", "tacco", "tacco_non-det"]
+    # methods = ["tangram", "tangram_non-det", "dot", "dot_non-det", "tacco", "tacco_non-det"]
+    methods = ["tangram", "tangram_non-det"]
     result_folders = ["results_cell", "results_cellType", "results_cellTypeMinor"]
     metric_folders = ["metrics_cell", "metrics_cellType", "metrics_cellTypeMinor"]
 

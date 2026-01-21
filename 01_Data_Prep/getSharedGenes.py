@@ -50,7 +50,6 @@ def read_cells(path: Path):
     return s
 
 
-
 def read_spots(path: Path):
     s = set()
     with path.open("r", encoding="utf-8") as f:
@@ -66,6 +65,7 @@ def read_spots(path: Path):
                 continue
             s.add(spot)
     return s
+
 
 def main(argv=None):
 

@@ -115,7 +115,7 @@ def tangram_align_data(
             mat = ad_map.X.copy()
         argmax_idx = np.argmax(mat, axis=0)  # for each spot (column), index of max cell / cell type
         one_hot = np.zeros_like(mat, dtype=float)
-        one_hot[np.arange(mat.shape[0]), argmax_idx] = 1.0
+        one_hot[argmax_idx, np.arange(mat.shape[1])] = 1.0
         ad_map.X = one_hot
 
     # Step 5: Compute Z' out of the mapping (expected gene expression per spot, scRNA data weighted by mapping)

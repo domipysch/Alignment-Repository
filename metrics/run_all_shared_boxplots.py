@@ -44,7 +44,7 @@ def compute_medians(paths_to_jsons: list[Path], labels: list[str]) -> dict:
     return medians
 
 
-def create_shared_boxplot(paths_to_jsons: list[Path], labls: list[str], title: str, output_path: Path = None):
+def create_shared_boxplot(paths_to_jsons: list[Path], labls: list[str], title: str, ylabel: str, output_path: Path = None):
     """
     Create a combined boxplot from multiple JSON files.
     Values are extracted from each file and plotted as side-by-side boxplots.
@@ -70,7 +70,7 @@ def create_shared_boxplot(paths_to_jsons: list[Path], labls: list[str], title: s
     # Create boxplot
     plt.figure(figsize=(10, 6))
     plt.boxplot(all_data, tick_labels=labls)
-    plt.ylabel("Custom locality metric", fontsize=label_fontsize)
+    plt.ylabel(ylabel, fontsize=label_fontsize)
     plt.title(title, fontsize=title_fontsize)
     plt.xticks(rotation=30, fontsize=xtick_fontsize)
     plt.tight_layout()
@@ -90,6 +90,7 @@ def main(metrics_paths: list[Path], labels: list[str], output_folder: Path):
         [path / "o2" / "boxplots_per_gene" / "cossim.json" for path in metrics_paths],
         labels,
         "o2 across runs",
+        "Cosine similarity",
         output_path=output_folder / "o2_overall.png"
     )
 
@@ -98,6 +99,7 @@ def main(metrics_paths: list[Path], labels: list[str], output_folder: Path):
         [path / "o4" / "knn" / "cossim.json" for path in metrics_paths],
         labels,
         "o4 across runs",
+        "Custom locality metric",
         output_path=output_folder / "o4_overall.png"
     )
 

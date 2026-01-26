@@ -248,9 +248,6 @@ def main():
         one_hot.scatter_(1, argmax_idx, 1.0)
         spot_to_cell_map.X = one_hot.detach().cpu().numpy()
 
-
-    logger.debug(spot_to_cell_map.X)
-
     # Step 6: Compute Z' out of the mapping (expected gene expression per spot, scRNA data weighted by mapping)
     predicted_spot_expressions = spot_to_cell_map.X @ adata_sc.X  # S x G
 
@@ -274,10 +271,6 @@ def main():
     logger.info(f"Saved tangram GEP to {output_path}")
 
 
-
-
 if __name__ == "__main__":
     main()
-
-
 

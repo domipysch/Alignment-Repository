@@ -1,6 +1,5 @@
 from copy import copy
 from utils.dataset_query import get_shared_genes
-import os
 from pathlib import Path
 from typing import Dict
 import pandas as pd
@@ -10,14 +9,15 @@ from utils.utils import compute_basic_metrics_for_gene_groups
 import argparse
 import json
 import logging
+logger = logging.getLogger(__name__)
 
 
-def compute_metrics_scRNA(dataset_folder: str) -> Dict[str, float]:
+def compute_metrics_scRNA(dataset_folder: Path) -> Dict[str, float]:
     """
     Load input scRNA GEP file as pandas DataFrame & compute basic metrics.
     """
 
-    gep_path = Path(os.path.join(dataset_folder, "scData_GEP.csv"))
+    gep_path = dataset_folder / "scData_GEP.csv"
     if not gep_path.exists():
         raise FileNotFoundError(f"Ergebnisdatei nicht gefunden: {gep_path}")
 
@@ -38,10 +38,13 @@ def compute_metrics_scRNA(dataset_folder: str) -> Dict[str, float]:
     )
 
 
-def compute_metrics_z1(dataset_folder: str, result_file: Path) -> Dict[str, float]:
+def compute_metrics_o1(dataset_folder: Path, result_file: Path) -> Dict[str, float]:
     """
     Load predicted GEP file as pandas DataFrame & compute basic metrics.
     """
+
+    if not dataset_folder.exists():
+        raise FileNotFoundError(f"Datensatzordner nicht gefunden: {dataset_folder}")
 
     # Check if result file exists
     if not result_file.exists():
@@ -245,7 +248,7 @@ def create_log_norms_boxplots(metrics_result: Dict, out_path: Path = None, show:
     plt.close(fig)
 
 
-def main(dataset: str, results_folder_name: str, metrics_folder_name: str, method: str):
+def main(dataset_folder: Path, results_path: Path, metrics_output_path: Path):
     """
     Compute metrics for objective 1 and save results as JSON files / Diagrams.
 
@@ -253,25 +256,21 @@ def main(dataset: str, results_folder_name: str, metrics_folder_name: str, metho
     - Visualize norms distributions (histograms + boxplots) for scRNA data and predicted GEP data
 
     Args:
-        dataset:
-        results_folder_name:
-        metrics_folder_name:
-        method:
+        dataset_folder:
+        results_path:
+        metrics_output_path:
 
     Returns:
 
     """
-    logging.info("Compute metrics of z1 for dataset:", dataset, "method:", method)
-
-    result_file = Path(dataset) / results_folder_name / f"{method}_GEP.csv"
+    logger.info("Compute metrics for o1")
 
     # Compute metrics on scRNA data
-    res_scrna = compute_metrics_scRNA(dataset)
+    res_scrna = compute_metrics_scRNA(dataset_folder)
 
     # Save result
-    metrics_dir = Path(dataset) / metrics_folder_name
-    metrics_dir.mkdir(parents=True, exist_ok=True)
-    out_path = metrics_dir / "scRNA_Metrics.json"
+    metrics_output_path.mkdir(parents=True, exist_ok=True)
+    out_path = metrics_output_path / "scRNA_Metrics.json"
     to_save = copy(res_scrna)
     # del to_save["marker_norms"]
     # del to_save["non_marker_norms"]
@@ -287,13 +286,15 @@ def main(dataset: str, results_folder_name: str, metrics_folder_name: str, metho
             indent=4,
         )
 
-    # Compute metrics for z1
-    res = compute_metrics_z1(dataset, result_file)
+    # Compute metrics for o1
+    res = compute_metrics_o1(dataset_folder, results_path)
 
     # Save result
-    metrics_dir = Path(dataset) / metrics_folder_name / method / "z1"
+    scrna_dir = metrics_output_path / "scRNA"
+    scrna_dir.mkdir(parents=True, exist_ok=True)
+    metrics_dir = metrics_output_path / "o1"
     metrics_dir.mkdir(parents=True, exist_ok=True)
-    out_path = metrics_dir / "z1_metrics.json"
+    out_path = metrics_dir / "o1_metrics.json"
     to_save = copy(res)
     # del to_save["marker_norms"]
     # del to_save["non_marker_norms"]
@@ -311,57 +312,56 @@ def main(dataset: str, results_folder_name: str, metrics_folder_name: str, metho
 
 
     # Crate some diagrams on metrics of scRNA
-    # create_norms_histograms(
-    #     res_scrna,
-    #     out_path=Path(dataset) / metrics_folder_name / "scRNA_norms_histogram.png",
-    #     show=False,
-    #     bins=100
-    # )
-    #
-    # create_log_norms_histograms(
-    #     res_scrna,
-    #     out_path=Path(dataset) / metrics_folder_name / "scRNA_log_norms_histogram.png",
-    #     show=False,
-    #     bins=100
-    # )
-    #
-    # create_norms_boxplots(
-    #     res_scrna,
-    #     out_path=Path(dataset) / metrics_folder_name / "scRNA_norms_boxplot.png",
-    #     show=False
-    # )
-    #
-    # create_log_norms_boxplots(
-    #     res_scrna,
-    #     out_path=Path(dataset) / metrics_folder_name / "scRNA_log_norms_boxplot.png",
-    #     show=False
-    # )
-    #
+    create_norms_histograms(
+        res_scrna,
+        out_path=scrna_dir / "scRNA_norms_histogram.png",
+        show=False,
+        bins=100
+    )
 
-    # Crate some diagrams on z1 metrics
+    create_log_norms_histograms(
+        res_scrna,
+        out_path=scrna_dir / "scRNA_log_norms_histogram.png",
+        show=False,
+        bins=100
+    )
+
+    create_norms_boxplots(
+        res_scrna,
+        out_path=scrna_dir / "scRNA_norms_boxplot.png",
+        show=False
+    )
+
+    create_log_norms_boxplots(
+        res_scrna,
+        out_path=scrna_dir / "scRNA_log_norms_boxplot.png",
+        show=False
+    )
+
+    # Crate some diagrams on o1 metrics
     create_norms_histograms(
         res,
-        out_path=Path(dataset) / metrics_folder_name / method / "z1" / "norms_histogram.png",
+        out_path=metrics_dir / "norms_histogram.png",
         show=False,
         bins=100
     )
 
     create_log_norms_histograms(
         res,
-        out_path=Path(dataset) / metrics_folder_name / method / "z1" / "log_norms_histogram.png",
+        out_path=metrics_dir / "log_norms_histogram.png",
         show=False,
         bins=100
     )
 
     create_norms_boxplots(
         res,
-        out_path=Path(dataset) / metrics_folder_name / method / "z1" / "norms_boxplot.png",
+        out_path=metrics_dir / "norms_boxplot.png",
         show=False
     )
 
     create_log_norms_boxplots(
         res,
-        out_path=Path(dataset) / metrics_folder_name / method / "z1" / "log_norms_boxplot.png",
+        out_path=metrics_dir / "log_norms_boxplot.png",
         show=False
     )
 
@@ -372,11 +372,10 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
     parser = argparse.ArgumentParser(description="Run metrics for objective 1 on a predicted GEP file")
-    parser.add_argument('-d', '--dataset', type=str, help='Path to dataset folder')
-    parser.add_argument('-m', '--method', type=str, help='Name of method to run metrics on')
-    parser.add_argument('-r', '--results', type=str, help='Name of folder to run metrics on')
-    parser.add_argument('-me', '--metrics', type=str, help='Name of folder to save metrics to')
+    parser.add_argument('-d', '--dataset', type=Path, help='Path to dataset folder')
+    parser.add_argument('-r', '--result', type=Path, help='Path to result file')
+    parser.add_argument('-m', '--metrics', type=Path, help='Path to output metric folder')
     args = parser.parse_args()
 
-    main(args.dataset, args.results, args.metrics, args.method)
+    main(args.dataset, args.results, args.metrics)
 

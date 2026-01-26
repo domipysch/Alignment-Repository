@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 import os
 import pandas as pd
@@ -11,6 +12,7 @@ from utils.distance_metrics import cosine_similarity, sqrt_cosine_similarity, eu
 import matplotlib.pyplot as plt
 import argparse
 import json
+logger = logging.getLogger(__name__)
 
 
 def compute_metrics_per_gene(adata_z, adata_predicted_z, save_cossim_json: Path = None) -> None:
@@ -193,7 +195,7 @@ def generate_box_plot_metrics_per_gene(adata_predicted_z, output_folder: Path = 
         plt.setp(ax.get_xticklabels(), rotation=45, ha='right', fontsize=9)
 
         if output_folder:
-            plt.savefig(output_folder / f"z3_0-1_metrics.png", bbox_inches='tight')
+            plt.savefig(output_folder / f"o2_0-1_metrics.png", bbox_inches='tight')
         else:
             plt.show()
 
@@ -220,7 +222,7 @@ def generate_box_plot_metrics_per_gene(adata_predicted_z, output_folder: Path = 
             plt.setp(ax.get_xticklabels(), rotation=45, ha='right', fontsize=9)
 
         if output_folder:
-            plt.savefig(output_folder / f"z3_{col}.png", bbox_inches='tight')
+            plt.savefig(output_folder / f"o2_{col}.png", bbox_inches='tight')
         else:
             plt.show()
         plt.close(fig)
@@ -276,7 +278,7 @@ def generate_box_plot_metrics_per_spot(adata_predicted_z, output_folder: Path = 
         if output_folder:
             output_folder = Path(output_folder)
             output_folder.mkdir(parents=True, exist_ok=True)
-            plt.savefig(output_folder / f"z3_spots_0-1_metrics.png", bbox_inches='tight')
+            plt.savefig(output_folder / f"o2_spots_0-1_metrics.png", bbox_inches='tight')
         else:
             plt.show()
         plt.close(fig)
@@ -303,7 +305,7 @@ def generate_box_plot_metrics_per_spot(adata_predicted_z, output_folder: Path = 
         if output_folder:
             output_folder = Path(output_folder)
             output_folder.mkdir(parents=True, exist_ok=True)
-            plt.savefig(output_folder / f"z3_spots_{col}.png", bbox_inches='tight')
+            plt.savefig(output_folder / f"o2_spots_{col}.png", bbox_inches='tight')
         else:
             plt.show()
         plt.close(fig)
@@ -404,14 +406,14 @@ def generate_gene_spatial_distribution_plot(adata_z, adata_predicted_z, gene_nam
     plt.close(fig)
 
 
-def generate_spatial_distribution_plots_for_some_genes(adata_z, adata_predicted_z, result_folder_spatial_per_gene: Path) -> None:
+def generate_spatial_distribution_plots_for_some_genes(adata_z, adata_predicted_z, metrics_folder_spatial_per_gene: Path) -> None:
     """
     Pick a few genes based on cosine similarity and generate spatial distribution plots for them.
 
     Args:
         adata_z:
         adata_predicted_z:
-        result_folder_spatial_per_gene:
+        metrics_folder_spatial_per_gene:
 
     Returns:
 
@@ -472,7 +474,7 @@ def generate_spatial_distribution_plots_for_some_genes(adata_z, adata_predicted_
     # Generate plots
     for gene in selected_genes:
         cossim_val = float(adata_predicted_z.var.at[gene, 'cossim'])
-        output_path = result_folder_spatial_per_gene / f"{cossim_val:.2f}_{gene}_spatial_distribution.png"
+        output_path = metrics_folder_spatial_per_gene / f"{cossim_val:.2f}_{gene}_spatial_distribution.png"
         generate_gene_spatial_distribution_plot(
             adata_z,
             adata_predicted_z,
@@ -571,9 +573,9 @@ def plot_delta_map(adata_z, adata_predicted_z, gene_name: str, mode: str = "rela
     plt.close(fig)
 
 
-def main(dataset_folder: str, results_folder_name: str, metrics_folder_name: str, method: str):
+def main(dataset_folder: Path, results_path: Path, metrics_output_folder: Path):
     """
-    Compute metrics for objective 2 and save results as JSON files / diagrams.
+    Compute metrics for objective 3 and save results as JSON files / diagrams.
 
     - Compute cosine similarity (and other distance metrics) per gene and save to json; create boxplots for distribution.
     - Compute cosine similarity (and other distance metrics) per spot and save to json; create boxplots for distribution.
@@ -581,30 +583,27 @@ def main(dataset_folder: str, results_folder_name: str, metrics_folder_name: str
 
     Args:
         dataset_folder: Path to dataset folder
-        results_folder_name: Name of the results folder containing method outputs
-        metrics_folder_name: Output folder for metrics and plots
-        method: Method name used to locate result files
+        results_path:
+        metrics_output_folder: 
 
     Returns: None
     """
-    logging.info("Compute metrics of o2 for dataset:", dataset_folder, "method:", method, "metric:", metrics_folder_name)
-    result_file = Path(dataset_folder) / results_folder_name / f"{method}_GEP.csv"
+    logger.info("Compute metrics for o2")
 
     # Assemble file paths
-    result_folder_boxplots_per_gene = Path(dataset_folder) / metrics_folder_name / method / "z3" / "boxplots_per_gene"
-    result_cossim_per_gene_json = Path(dataset_folder) / metrics_folder_name / method / "z3" / "boxplots_per_gene" / "cossim.json"
-    result_folder_boxplots_per_spot = Path(dataset_folder) / metrics_folder_name / method / "z3" / "boxplots_per_spot"
-    result_folder_spatial_per_gene = Path(dataset_folder) / metrics_folder_name / method / "z3" / "spatial_per_gene"
-    os.makedirs(result_folder_boxplots_per_gene, exist_ok=True)
-    os.makedirs(result_folder_boxplots_per_spot, exist_ok=True)
+    metrics_folder_boxplots_per_gene = metrics_output_folder / "o2" / "boxplots_per_gene"
+    metrics_cossim_per_gene_json = metrics_output_folder / "o2" / "boxplots_per_gene" / "cossim.json"
+    metrics_folder_boxplots_per_spot = metrics_output_folder / "o2" / "boxplots_per_spot"
+    metrics_folder_spatial_per_gene = metrics_output_folder / "o2" / "spatial_per_gene"
+    os.makedirs(metrics_folder_boxplots_per_gene, exist_ok=True)
+    os.makedirs(metrics_folder_boxplots_per_spot, exist_ok=True)
 
-    # temp
-    # force remove directory even if not empty
-    # shutil.rmtree(result_folder_spatial_per_gene, ignore_errors=True)
-    # os.makedirs(result_folder_spatial_per_gene, exist_ok=True)
+    # Force remove directory even if not empty
+    shutil.rmtree(metrics_folder_spatial_per_gene, ignore_errors=True)
+    os.makedirs(metrics_folder_spatial_per_gene, exist_ok=True)
 
     # Load data (input ST and predicted)
-    z_data, predicted_z_data = get_z_real_and_predicted_data(dataset_folder, result_file)
+    z_data, predicted_z_data = get_z_real_and_predicted_data(dataset_folder, results_path)
 
     # Assert that both DataFrames have the same shape of genes and spots
     assert z_data.shape == predicted_z_data.shape, "DataFrames haben unterschiedliche Formen."
@@ -613,21 +612,21 @@ def main(dataset_folder: str, results_folder_name: str, metrics_folder_name: str
     adata_z, adata_predicted_z = create_adata_object(z_data), create_adata_object(predicted_z_data)
 
     # Add spatial locations to AnnData objects
-    coords_path = Path(os.path.join(dataset_folder, "stData_Spots.csv"))
+    coords_path = dataset_folder / "stData_Spots.csv"
     df_coords = pd.read_csv(coords_path, header=0, index_col=0)
     df_coords.index = df_coords.index.astype(str)
     adata_z.obsm['coords'] = df_coords.loc[adata_z.obs_names, ['cArray0', 'cArray1']].to_numpy()
     adata_predicted_z.obsm['coords'] = df_coords.loc[adata_z.obs_names, ['cArray0', 'cArray1']].to_numpy()
 
     # Compute and store cossim per gene in adata_predicted_z.var
-    compute_metrics_per_gene(adata_z, adata_predicted_z, save_cossim_json=result_cossim_per_gene_json)
+    compute_metrics_per_gene(adata_z, adata_predicted_z, save_cossim_json=metrics_cossim_per_gene_json)
 
-    generate_spatial_distribution_plots_for_some_genes(adata_z, adata_predicted_z, result_folder_spatial_per_gene)
+    generate_spatial_distribution_plots_for_some_genes(adata_z, adata_predicted_z, metrics_folder_spatial_per_gene)
 
     # Generate boxplot per gene
     generate_box_plot_metrics_per_gene(
         adata_predicted_z,
-        output_folder=result_folder_boxplots_per_gene
+        output_folder=metrics_folder_boxplots_per_gene
     )
 
     # Compute and store cossim per spot in adata_predicted_z.var
@@ -636,7 +635,7 @@ def main(dataset_folder: str, results_folder_name: str, metrics_folder_name: str
     # Generate boxplot per spot
     generate_box_plot_metrics_per_spot(
         adata_predicted_z,
-        output_folder=result_folder_boxplots_per_spot,
+        output_folder=metrics_folder_boxplots_per_spot,
     )
 
 
@@ -646,10 +645,9 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
     parser = argparse.ArgumentParser(description="Run metrics for objective 2 on a result file")
-    parser.add_argument('-d', '--dataset', type=str, help='Path to dataset folder')
-    parser.add_argument('-m', '--method', type=str, help='Name of method to run metrics on')
-    parser.add_argument('-r', '--results', type=str, help='Name of folder to run metrics on')
-    parser.add_argument('-me', '--metrics', type=str, help='Name of folder save metrics to')
+    parser.add_argument('-d', '--dataset', type=Path, help='Path to dataset folder')
+    parser.add_argument('-r', '--result', type=Path, help='Path to result file')
+    parser.add_argument('-m', '--metrics', type=Path, help='Path to output metric folder')
     args = parser.parse_args()
 
-    main(args.dataset, args.results, args.metrics, args.method)
+    main(args.dataset, args.result, args.metrics)

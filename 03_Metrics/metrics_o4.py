@@ -27,6 +27,7 @@ from matplotlib import cm
 import argparse
 import json
 import logging
+logger = logging.getLogger(__name__)
 
 
 # ------------ Spatial Graph Creation
@@ -41,7 +42,7 @@ class NeighborhoodType(enum.Enum):
 
 
 def create_spatial_graph(
-    dataset_folder: str,
+    dataset_folder: Path,
     neighborhood_type: NeighborhoodType = NeighborhoodType.KNN,
     k: int = 4,
     radius: float = None
@@ -58,7 +59,7 @@ def create_spatial_graph(
     """
 
     # Check if file exists
-    spots_path = Path(os.path.join(dataset_folder, "stData_Spots.csv"))
+    spots_path = dataset_folder / "stData_Spots.csv"
     if not spots_path.exists():
         raise FileNotFoundError(f"Spots Datei nicht gefunden: {spots_path}")
 
@@ -197,7 +198,7 @@ def create_spatial_graph(
 
 # In Tangram Refined: L_
 def binary_adjacency_matrix_from_graph(
-    dataset_folder: str,
+    dataset_folder: Path,
     G: nx.Graph
 ) -> pd.DataFrame:
     """
@@ -208,7 +209,7 @@ def binary_adjacency_matrix_from_graph(
     Returns:
     - A: pandas.DataFrame, shape (n_spots, n_spots), values 0/1, Index/Columns = spot_ids
     """
-    spots_path = Path(os.path.join(dataset_folder, "stData_Spots.csv"))
+    spots_path = dataset_folder / "stData_Spots.csv"
     if not spots_path.exists():
         raise FileNotFoundError(f"stData_Spots.csv nicht gefunden unter: {spots_path}")
 
@@ -239,7 +240,7 @@ def binary_adjacency_matrix_from_graph(
 
 # In Tangram Refined: L
 def locality_matrix(
-    dataset_folder: str,
+    dataset_folder: Path,
     method: str = "rbf",  # "rbf", "linear", "inverse"
     sigma: float = None,  # used for 'rbf'; if None inferred from data
     dtype=np.float32
@@ -252,7 +253,7 @@ def locality_matrix(
     Returns: pandas.DataFrame with Index/Columns = spot_ids (as strings) and dtype dtype.
     """
 
-    spots_path = Path(os.path.join(dataset_folder, "stData_Spots.csv"))
+    spots_path = dataset_folder / "stData_Spots.csv"
     if not spots_path.exists():
         raise FileNotFoundError(f"stData_Spots.csv nicht gefunden: {spots_path}")
 
@@ -322,7 +323,7 @@ def locality_matrix(
     return pd.DataFrame(sim, index=spot_ids, columns=spot_ids)
 
 
-def compute_tangram_refined_metric_1(adata_z: AnnData, adata_predicted_z: AnnData, dataset_folder: str) -> pd.DataFrame:
+def compute_tangram_refined_metric_1(adata_z: AnnData, adata_predicted_z: AnnData, dataset_folder: Path) -> pd.DataFrame:
     """
     Compute for each spot (in the order adata_z.obs_names) two metrics:
     - cossim: cosine similarity between the (locally smoothed) observed and predicted vector (over genes)
@@ -367,7 +368,7 @@ def compute_tangram_refined_metric_1(adata_z: AnnData, adata_predicted_z: AnnDat
     return result_df
 
 
-def compute_tangram_refined_metric_3(adata_z: AnnData, adata_predicted_z: AnnData, dataset_folder: str, save_gog_json: Path = None) -> pd.DataFrame:
+def compute_tangram_refined_metric_3(adata_z: AnnData, adata_predicted_z: AnnData, dataset_folder: Path, save_gog_json: Path = None) -> pd.DataFrame:
     """
     Compute the Getis-Ord G* statistic for each spot (in the order adata_z.obs_names).
 
@@ -505,7 +506,7 @@ def visualize_tangram_refined_metrics(
     plt.tight_layout()
 
     if output_folder:
-        plt.savefig(output_folder / f"z4_tg_ref_metrics.png", bbox_inches='tight')
+        plt.savefig(output_folder / f"o4_tg_ref_metrics.png", bbox_inches='tight')
     else:
         plt.show()
 
@@ -650,7 +651,7 @@ def create_box_plots_from_edge_annots(
 
     plt.tight_layout()
     if output_folder:
-        plt.savefig(output_folder / f"z4_edges_box_plots.png", bbox_inches='tight')
+        plt.savefig(output_folder / f"o4_edges_box_plots.png", bbox_inches='tight')
     else:
         plt.show()
 
@@ -756,14 +757,14 @@ def plot_edge_cossim_spatial(
     plt.tight_layout()
 
     if output_folder:
-        plt.savefig(output_folder / f"z4_edges_spatial_plots.png", bbox_inches='tight')
+        plt.savefig(output_folder / f"o4_edges_spatial_plots.png", bbox_inches='tight')
     else:
         plt.show()
 
     plt.close(fig)
 
 
-def main(dataset_folder: str, results_folder_name: str, metrics_folder_name: str, method: str):
+def main(dataset_folder: Path, results_path: Path, metrics_output_folder: Path):
     """
     Compute metrics for objective 4 and save results as JSON files / diagrams.
 
@@ -773,45 +774,28 @@ def main(dataset_folder: str, results_folder_name: str, metrics_folder_name: str
 
     Args:
         dataset_folder: Path to dataset folder
-        results_folder_name: Name of the results folder containing method outputs
-        metrics_folder_name: Output folder for metrics and plots
-        method: Method name used to locate result files
+        results_path:
+        metrics_output_folder:
 
     Returns: None
     """
-    logging.info("Compute metrics of z4 for dataset:", dataset_folder, "method:", method)
-    result_file = Path(dataset_folder) / results_folder_name / f"{method}_GEP.csv"
+    logger.info("Compute metrics for o4")
 
     # Assemble file and folder names
-    result_folder = Path(dataset_folder) / metrics_folder_name / method / "z4"
-    os.makedirs(result_folder, exist_ok=True)
-    result_folder_knn = Path(dataset_folder) / metrics_folder_name / method / "z4" / "knn"
-    os.makedirs(result_folder_knn, exist_ok=True)
-    result_folder_delauney = Path(dataset_folder) / metrics_folder_name / method / "z4" / "delauney"
-    os.makedirs(result_folder_delauney, exist_ok=True)
+    output_folder = metrics_output_folder / "o4"
+    os.makedirs(output_folder, exist_ok=True)
+    output_folder_knn = output_folder / "knn"
+    os.makedirs(output_folder_knn, exist_ok=True)
+    output_folder_delauney = output_folder / "delauney"
+    os.makedirs(output_folder_delauney, exist_ok=True)
 
-    # result_gog_file = Path(dataset_folder) / metrics_folder_name / method / "z4" / "gog.json"
-    result_own_cossim_file = Path(dataset_folder) / metrics_folder_name / method / "z4" / "knn" / "cossim.json"
+    result_own_knn_cossim_file = output_folder_knn / "cossim.json"
 
-    z_data, predicted_z_data = get_z_real_and_predicted_data(dataset_folder, result_file)
+    z_data, predicted_z_data = get_z_real_and_predicted_data(dataset_folder, results_path)
     # Assert that both DataFrames have the same shape of genes and spots
     assert z_data.shape == predicted_z_data.shape, "DataFrames haben unterschiedliche Formen."
     # Create AnnData objects
     adata_z, adata_predicted_z = create_adata_object(z_data), create_adata_object(predicted_z_data)
-
-    # tg_metric_1 = compute_tangram_refined_metric_1(adata_z, adata_predicted_z, dataset_folder)
-    # tg_metric_3 = compute_tangram_refined_metric_3(
-    #     adata_z,
-    #     adata_predicted_z,
-    #     dataset_folder,
-    #     result_gog_file,
-    # )
-
-    # visualize_tangram_refined_metrics(
-    #     tg_metric_1,
-    #     tg_metric_3,
-    #     output_folder=result_folder,
-    # )
 
     # KNN
     graph = create_spatial_graph(dataset_folder, neighborhood_type=NeighborhoodType.KNN, k=4)
@@ -819,38 +803,12 @@ def main(dataset_folder: str, results_folder_name: str, metrics_folder_name: str
         adata_z,
         adata_predicted_z,
         graph,
-        save_own_cossim=result_own_cossim_file,
+        save_own_cossim=result_own_knn_cossim_file,
     )
     create_box_plots_from_edge_annots(
         graph,
-        output_folder=result_folder_knn,
+        output_folder=output_folder_knn,
     )
-
-    # plot_edge_cossim_spatial(
-    #     graph,
-    #     metric="cossim_diff",
-    #     output_folder=result_folder_knn
-    # )
-
-    # Delauney
-    # graph = create_spatial_graph(dataset_folder, neighborhood_type=NeighborhoodType.DELAUNEY)
-    # graph = add_own_metrics_to_edges(adata_z, adata_predicted_z, graph)
-    # create_box_plots_from_edge_annots(
-    #     graph,
-    #     output_folder=result_folder_delauney
-    # )
-    # plot_edge_cossim_spatial(
-    #     graph,
-    #     metric="cossim_diff",
-    #     output_folder=result_folder_delauney
-    # )
-
-    # Add spatial locations
-    # coords_path = Path(os.path.join(dataset_folder, "stData_Spots.csv"))
-    # df_coords = pd.read_csv(coords_path, header=0, index_col=0)
-    # adata_z.obsm['coords'] = df_coords.loc[adata_z.obs_names, ['cArray0', 'cArray1']].to_numpy()
-    # adata_predicted_z.obsm['coords'] = df_coords.loc[adata_z.obs_names, ['cArray0', 'cArray1']].to_numpy()
-
 
 if __name__ == "__main__":
     # Configure basic logging
@@ -858,10 +816,9 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
     parser = argparse.ArgumentParser(description="Run metric 3 on a result file")
-    parser.add_argument('-d', '--dataset', type=str, help='Path to dataset folder')
-    parser.add_argument('-m', '--method', type=str, help='Name of method to run metrics on')
-    parser.add_argument('-r', '--results', type=str, help='Name of folder to run metrics on')
-    parser.add_argument('-me', '--metrics', type=str, help='Name of folder to save metrics to')
+    parser.add_argument('-d', '--dataset', type=Path, help='Path to dataset folder')
+    parser.add_argument('-r', '--result', type=Path, help='Path to result file')
+    parser.add_argument('-m', '--metrics', type=Path, help='Path to output metric folder')
     args = parser.parse_args()
 
-    main(args.dataset, args.results, args.metrics, args.method)
+    main(args.dataset, args.result, args.metrics)

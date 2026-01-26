@@ -7,6 +7,7 @@ import multiprocessing as mp
 import logging
 from utils.dataset_query import get_z_real_and_predicted_data
 from utils.utils import create_adata_object
+logger = logging.getLogger(__name__)
 
 
 NUM_PERMUTATIONS = 200
@@ -200,15 +201,14 @@ def add_p_value_to_json(json_path):
     logging.info(f"Added p_value={p_value:.6f} to {json_path}")
 
 
-def main(dataset_folder: str, results_folder_name: str, metrics_folder_name: str, method: str):
-    logging.info(f"Compute permutation test for z3 for dataset: {dataset_folder}, folder: {results_folder_name}, method: {method}")
-    result_file = Path(dataset_folder) / results_folder_name / f"{method}_GEP.csv"
+def main(dataset_folder: Path, results_file: Path, metrics_folder_name: Path):
+    logger.info("Run permutation test for objective o2")
 
-    result_folder_permutation = Path(dataset_folder) / metrics_folder_name / method / "z3" / "permutation_test"
+    result_folder_permutation = metrics_folder_name / "o2" / "permutation_test"
     os.makedirs(result_folder_permutation, exist_ok=True)
 
     # Load data
-    z_data, predicted_z_data = get_z_real_and_predicted_data(dataset_folder, result_file)
+    z_data, predicted_z_data = get_z_real_and_predicted_data(dataset_folder, results_file)
 
     # Assert that both DataFrames have the same shape of genes and spots
     assert z_data.shape == predicted_z_data.shape, "DataFrames haben unterschiedliche Formen."
@@ -229,14 +229,9 @@ if __name__ == "__main__":
     logger = logging.getLogger(__name__)
 
     parser = argparse.ArgumentParser(description="Run permutation test on cos-sim metric for objective o2")
-    parser.add_argument('-d', '--dataset', type=str, help='Path to dataset folder')
+    parser.add_argument('-d', '--dataset', type=Path, help='Path to dataset folder')
+    parser.add_argument('-r', '--result', type=Path, help='Path to result file')
+    parser.add_argument('-m', '--metrics', type=Path, help='Path to output metric folder')
     args = parser.parse_args()
 
-    # methods = ["tangram", "tangram_non-det", "dot", "dot_non-det", "tacco", "tacco_non-det"]
-    methods = ["tangram", "tangram_non-det"]
-    result_folders = ["results_cell", "results_cellType", "results_cellTypeMinor"]
-    metric_folders = ["metrics_cell", "metrics_cellType", "metrics_cellTypeMinor"]
-
-    for method in methods:
-        for result_folder, metric_folder in zip(result_folders, metric_folders):
-            main(args.dataset, result_folder, metric_folder, method)
+    main(args.dataset, args.result, args.metrics)

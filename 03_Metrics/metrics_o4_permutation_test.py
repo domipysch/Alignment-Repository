@@ -23,6 +23,9 @@ from utils.distance_metrics import (
 )
 from metrics_o4 import create_spatial_graph, NeighborhoodType
 import json
+import sys
+import logging
+logger = logging.getLogger(__name__)
 
 
 NUM_PERMUTATIONS = 200
@@ -113,12 +116,11 @@ def add_p_value_to_json(json_path):
     print(f"Added p_value={p_value:.6f} to {json_path}")
 
 
-def main(dataset_folder: str, results_folder_name: str, metrics_folder_name: str, method: str):
-    print("Compute permutation test for z4 for dataset:", dataset_folder, "folder:", results_folder_name, "method:", method)
-    result_file = Path(dataset_folder) / results_folder_name / f"{method}_GEP.csv"
+def main(dataset_folder: Path, result_file: Path, metrics_folder_name: Path):
+    logger.info("Run permutation test for objective o4")
 
-    result_folder = Path(dataset_folder) / metrics_folder_name / method / "z4" / "knn"
-    os.makedirs(result_folder, exist_ok=True)
+    output_folder = metrics_folder_name / "o4" / "knn"
+    os.makedirs(output_folder, exist_ok=True)
 
     z_data, predicted_z_data = get_z_real_and_predicted_data(dataset_folder, result_file)
     # Assert that both DataFrames have the same shape of genes and spots
@@ -145,23 +147,18 @@ def main(dataset_folder: str, results_folder_name: str, metrics_folder_name: str
         }
         edge_data.append(edge_entry)
     edge_df = pd.DataFrame(edge_data)
-    compute_permutation_test(edge_df, result_folder)
+    compute_permutation_test(edge_df, output_folder)
 
-    add_p_value_to_json(result_folder / "permutation_test.json")
-
+    add_p_value_to_json(output_folder / "permutation_test.json")
 
 
 if __name__ == "__main__":
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
     parser = argparse.ArgumentParser(description="Run permutation test on custom metric 4")
-    parser.add_argument('-d', '--dataset', type=str, help='Path to dataset folder')
+    parser.add_argument('-d', '--dataset', type=Path, help='Path to dataset folder')
+    parser.add_argument('-r', '--result', type=Path, help='Path to result file')
+    parser.add_argument('-m', '--metrics', type=Path, help='Path to output metric folder')
     args = parser.parse_args()
 
-    # methods = ["tangram", "tangram_non-det", "dot", "dot_non-det", "tacco", "tacco_non-det"]
-    methods = ["tangram", "tangram_non-det"]
-    result_folders = ["results_cell", "results_cellType", "results_cellTypeMinor"]
-    metric_folders = ["metrics_cell", "metrics_cellType", "metrics_cellTypeMinor"]
-
-    for method in methods:
-        for result_folder, metric_folder in zip(result_folders, metric_folders):
-            main(args.dataset, result_folder, metric_folder, method)
+    main(args.dataset, args.result, args.metrics)

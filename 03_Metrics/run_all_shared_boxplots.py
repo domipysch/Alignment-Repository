@@ -1,9 +1,14 @@
+from pathlib import Path
 import numpy as np
+import logging
 import matplotlib.pyplot as plt
 import json
+import sys
+import argparse
+logger = logging.getLogger(__name__)
 
 
-def compute_medians(paths_to_jsons: list[str], labels: list[str]) -> dict:
+def compute_medians(paths_to_jsons: list[Path], labels: list[str]) -> dict:
     """
     Compute the median of numeric values contained in each JSON file.
     """
@@ -39,7 +44,7 @@ def compute_medians(paths_to_jsons: list[str], labels: list[str]) -> dict:
     return medians
 
 
-def main(paths_to_jsons: list[str], labls: list[str], title: str, output_path: str = None):
+def main(paths_to_jsons: list[Path], labls: list[str], title: str, output_path: Path = None):
     """
     Create a combined boxplot from multiple JSON files.
     Values are extracted from each file and plotted as side-by-side boxplots.
@@ -79,29 +84,34 @@ def main(paths_to_jsons: list[str], labls: list[str], title: str, output_path: s
 
 
 if __name__ == "__main__":
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
-    paths = [
-        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_HumanBreastCancer_CID4465/metrics_cell/tangram/z4/knn/cossim.json",
-        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_HumanBreastCancer_CID4465/metrics_cellTypeMinor/tangram/z4/knn/cossim.json",
-        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_HumanBreastCancer_CID4465/metrics_cellType/tangram/z4/knn/cossim.json",
-        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_HumanBreastCancer_CID4465/metrics_cell/tangram_non-det/z4/knn/cossim.json",
-        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_HumanBreastCancer_CID4465/metrics_cellTypeMinor/tangram_non-det/z4/knn/cossim.json",
-        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_HumanBreastCancer_CID4465/metrics_cellType/tangram_non-det/z4/knn/cossim.json",
-    ]
+    parser = argparse.ArgumentParser(description="Create combined boxplots from multiple metric folders.")
+    parser.add_argument('-m', '--metrics', nargs="+", type=Path, help='Path to output metric folders')
+    parser.add_argument('-l', '--labels', nargs="+", type=str, help='Label for each box')
+    parser.add_argument('-o', '--output_folder', type=Path, help='Path to output folder')
+    args = parser.parse_args()
 
-    labels = [
-        "Cell - det.",
-        "Minor cell state - det.",
-        "Major cell state - det.",
-        "Cell - prob.",
-        "Minor cell state - prob.",
-        "Major cell state - prob.",
-    ]
+    logger.info("Create shared boxplots for:")
+    logger.info("Metrics: %s", args.metrics)
+    logger.info("Metrics output folder: %s", args.output_folder)
+    args.output_folder.mkdir(parents=True, exist_ok=True)
 
-    out_path = "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_HumanBreastCancer_CID4465/metrics_overall/z4-cossim-tangram.jpg"
+    if len(args.metrics) != len(args.labels):
+        raise ValueError("Anzahl der --paths muss gleich der Anzahl der --labels sein.")
+
+    # Create shared boxplot for o2
     main(
-        paths,
-        labels,
-        "HSO Data - Tangram",
-        output_path=out_path
+        [path / "o2" / "boxplots_per_gene" / "cossim.json" for path in args.metrics],
+        args.labels,
+        "o2 across runs",
+        output_path=args.output_folder / "o2_overall.png"
+    )
+
+    # Create shared boxplot for o4
+    main(
+        [path / "o4" / "knn" / "cossim.json" for path in args.metrics],
+        args.labels,
+        "o4 across runs",
+        output_path=args.output_folder / "o4_overall.png"
     )

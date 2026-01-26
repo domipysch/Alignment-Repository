@@ -1,23 +1,24 @@
 import argparse
 import sys
 import os
+from pathlib import Path
 import yaml
 import torch
 import torch.optim as optim
 import logging
 from anndata import AnnData
-from src.utils import load_sc_adata, load_st_adata, fmt_nonzero_4
-from src.model import AlternativeIdeaModel
-from src.loss import AlternativeIdeaLoss
-from src.spatial_graph import build_spatial_graph, SpatialGraphType
-from src.dataset import prepare_tensors_from_input
-from src.utils import graph_type_from_config
+from .src.utils import load_sc_adata, load_st_adata, fmt_nonzero_4
+from .src.model import AlternativeIdeaModel
+from .src.loss import AlternativeIdeaLoss
+from .src.spatial_graph import build_spatial_graph, SpatialGraphType
+from .src.dataset import prepare_tensors_from_input
+from .src.utils import graph_type_from_config
 from scipy.sparse import issparse
 import pandas as pd
 logger = logging.getLogger(__name__)
 
 
-def load_config(config_path: str) -> tuple[dict, dict, dict, dict]:
+def load_config(config_path: Path) -> tuple[dict, dict, dict, dict, dict]:
     if not os.path.exists(config_path):
         raise Exception(f"Config file not found at {config_path}")
 
@@ -29,15 +30,23 @@ def load_config(config_path: str) -> tuple[dict, dict, dict, dict]:
             raise ValueError("Top-level config must be a mapping (dict).")
 
         # Ensure required sections exist
-        required_sections = ["graph", "model", "training", "loss_weights"]
+        required_sections = ["mapping", "graph", "model", "training", "loss_weights"]
         missing_sections = [s for s in required_sections if s not in cfg]
         if missing_sections:
             raise ValueError(f"Missing required config sections: {', '.join(missing_sections)}")
 
+        mapping_cfg = cfg.get("mapping") if isinstance(cfg.get("mapping"), dict) else {}
         graph_cfg = cfg.get("graph") if isinstance(cfg.get("graph"), dict) else {}
         model_cfg = cfg.get("model") if isinstance(cfg.get("model"), dict) else {}
         training_cfg = cfg.get("training") if isinstance(cfg.get("training"), dict) else {}
         loss_weights_cfg = cfg.get("loss_weights") if isinstance(cfg.get("loss_weights"), dict) else {}
+
+        # Validate mapping config
+        if not mapping_cfg:
+            raise ValueError("`mapping` must be a mapping in the config.")
+        for key in ("deterministic",):
+            if key not in mapping_cfg:
+                raise ValueError(f"`mapping.{key}` is required in the config.")
 
         # Validate graph config
         if not graph_cfg:
@@ -72,7 +81,7 @@ def load_config(config_path: str) -> tuple[dict, dict, dict, dict]:
         # Validate training config
         if not training_cfg:
             raise ValueError("`training` must be a mapping in the config.")
-        for key in ("lr", "epochs"):
+        for key in ("lr", "epochs", "dropout_decoder"):
             if key not in training_cfg:
                 raise ValueError(f"`training.{key}` is required in the config.")
 
@@ -80,11 +89,11 @@ def load_config(config_path: str) -> tuple[dict, dict, dict, dict]:
         if not isinstance(loss_weights_cfg, dict):
             raise ValueError("`loss_weights` must be a mapping in the config.")
 
-    return graph_cfg, model_cfg, training_cfg, loss_weights_cfg
+    return mapping_cfg, graph_cfg, model_cfg, training_cfg, loss_weights_cfg
 
 
 def alternative_idea_compute_mapping(
-    path_to_config: str,
+    path_to_config: Path,
     adata_sc: AnnData,
     adata_st: AnnData,
     verbose_logging: bool,
@@ -93,7 +102,7 @@ def alternative_idea_compute_mapping(
 
     # 1. Load Config
     logger.debug(f"Load config: {path_to_config}")
-    graph_config, model_config, training_config, loss_weights = load_config(path_to_config)
+    mapping_config, graph_config, model_config, training_config, loss_weights = load_config(path_to_config)
     logger.info(f"Loaded config: {path_to_config}")
     logger.debug(f"Loaded training config: {training_config}")
     logger.debug(f"Loaded model config: {model_config}")
@@ -148,6 +157,9 @@ def alternative_idea_compute_mapping(
         g_sc=g_sc,
         d=model_config["d"],
         k=model_config["K"],
+        enc_hidden_dim=model_config["enc_hidden_dim"],
+        dec_hidden_dim=model_config["dec_hidden_dim"],
+        dropout_rate_decoder=training_config["dropout_decoder"],
     ).to(device)
 
     # 6. Initialize Loss and Optimizer
@@ -200,42 +212,34 @@ def alternative_idea_compute_mapping(
     return AnnData(X=A.detach().cpu().numpy())
 
 
-def main():
-
-    # 1. Parse Arguments
-    parser = argparse.ArgumentParser(description="Run AlternativeIdea alignment on a dataset folder")
-    parser.add_argument('-d', '--dataset', dest='dataset', type=str, help='Path to dataset folder')
-    parser.add_argument('-c', '--config', dest='config', type=str, help='Path to config.yaml')
-    parser.add_argument('-det', '--deterministic_mapping', dest='deterministic_mapping', action="store_true", help='Whether to convert mapping to deterministic (one-hot) form')
-    parser.add_argument('--logging', dest='logging', choices=['normal', 'verbose'], default='normal',
-                        help="Logging verbosity. Use 'verbose' for more logs.")
-    args = parser.parse_args()
-
-    # 2. Configure logging based on argument
-    level = logging.DEBUG if args.logging == "verbose" else logging.INFO
-    logging.basicConfig(stream=sys.stdout, level=level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-    logger.setLevel(level)
+def main(
+    dataset_folder: Path,
+    config_path: Path,
+    output_path: Path,
+    verbose_logging: bool = False
+):
 
     # Step 3: Load data
     logger.debug("Load input scRNA an ST data...")
-    adata_sc = load_sc_adata(args.dataset)  # C x G
-    adata_st = load_st_adata(args.dataset)  # S x G
+    adata_sc = load_sc_adata(dataset_folder)  # C x G
+    adata_st = load_st_adata(dataset_folder)  # S x G
     logger.info("Loaded input scRNA and ST data.")
 
     # Step 4: Map data using AlternativeIdea
     spot_to_cell_map = alternative_idea_compute_mapping(
-        args.config,
+        config_path,
         adata_sc,
         adata_st,
-        verbose_logging=(args.logging == "verbose"),
+        verbose_logging=verbose_logging,
         use_device="cpu"
     )  # S x C
     logger.info("Obtained spot-to-cell mapping AnnData.")
     assert spot_to_cell_map.X.shape == (adata_st.n_obs, adata_sc.n_obs), "dims passen nicht"
 
     # Step 5 (optional): Apply one-hot encoding to mapping
-    logger.info("Apply deterministic mapping" if args.deterministic_mapping else "Keep probabilistic mapping")
-    if args.deterministic_mapping:
+    mapping_config, _, _, _, _ = load_config(config_path)
+    logger.info("Apply deterministic mapping" if mapping_config["deterministic"] else "Keep probabilistic mapping")
+    if mapping_config["deterministic"]:
 
         # For each row (spot) in ad_map, set the max value to 1 and all others to 0
         if issparse(spot_to_cell_map.X):
@@ -259,7 +263,6 @@ def main():
     # - Rows: Genes
     # - Columns: Spots
     # - Top left cell = "GEP"
-    output_path = os.path.join(args.dataset, "results_alternative_idea", "alternative_idea_gep.csv")
     logger.info(f"Write result GEP to CSV: {output_path}")
     df = pd.DataFrame(
         predicted_spot_expressions,
@@ -268,9 +271,29 @@ def main():
     )
     df_formatted = df.map(fmt_nonzero_4)
     df_formatted.to_csv(output_path, index=True, index_label="GEP")  # "GEP" in cell 0,0
-    logger.info(f"Saved tangram GEP to {output_path}")
+    logger.info(f"Saved result GEP to {output_path}")
 
 
 if __name__ == "__main__":
-    main()
+
+    # 1. Parse Arguments
+    parser = argparse.ArgumentParser(description="Run AlternativeIdea alignment on a dataset folder")
+    parser.add_argument('-d', '--dataset', dest='dataset', type=Path, help='Path to dataset folder')
+    parser.add_argument('-c', '--config', dest='config', type=Path, help='Path to config.yaml')
+    parser.add_argument('-o', '--output_path', dest='output_path', type=Path, help='Path where to store result to')
+    parser.add_argument('--logging', dest='logging', choices=['normal', 'verbose'], default='normal',
+                        help="Logging verbosity. Use 'verbose' for more logs.")
+    args = parser.parse_args()
+
+    # 2. Configure logging based on argument
+    level = logging.DEBUG if args.logging == "verbose" else logging.INFO
+    logging.basicConfig(stream=sys.stdout, level=level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    logger.setLevel(level)
+
+    main(
+        args.dataset,
+        args.config,
+        args.output_path,
+        verbose_logging=(args.logging == "verbose"),
+    )
 

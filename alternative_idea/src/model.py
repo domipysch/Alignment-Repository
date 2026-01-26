@@ -14,9 +14,9 @@ class AlternativeIdeaModel(nn.Module):
         g_st: int,
         g_sc: int,
         d: int = 32,
+        k: int = 20,
         enc_hidden_dim: int = 64,
         dec_hidden_dim: int = 256,
-        k: int = 20,
         dropout_rate_decoder: float = 0.2,
     ):
         """

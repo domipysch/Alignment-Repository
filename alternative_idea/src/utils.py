@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 from typing import Dict
 from .spatial_graph import SpatialGraphType
 import anndata as ad
@@ -7,7 +7,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def load_sc_adata(dataset_folder: str) -> ad.AnnData:
+def load_sc_adata(dataset_folder: Path) -> ad.AnnData:
     """
     Load single-cell data from dataset folder into an AnnData object.
     Args:
@@ -17,12 +17,12 @@ def load_sc_adata(dataset_folder: str) -> ad.AnnData:
     """
     logger.debug("Load scRNA data")
     # In file: Genes = Rows, Cells = Columns
-    df = pd.read_csv(os.path.join(dataset_folder, "scData_GEP.csv"), index_col=0)
+    df = pd.read_csv(dataset_folder / "scData_GEP.csv", index_col=0)
     adata_sc = ad.AnnData(df.T)
     return adata_sc
 
 
-def load_st_adata(dataset_folder: str) -> ad.AnnData:
+def load_st_adata(dataset_folder: Path) -> ad.AnnData:
     """
     Load ST data from dataset folder into an AnnData object.
     Args:
@@ -32,11 +32,11 @@ def load_st_adata(dataset_folder: str) -> ad.AnnData:
     """
     logger.debug("Load ST data")
     # In file: Genes = Rows, Spots = Columns
-    df = pd.read_csv(os.path.join(dataset_folder, "stData_GEP.csv"), index_col=0)
+    df = pd.read_csv(dataset_folder / "stData_GEP.csv", index_col=0)
     adata_st = ad.AnnData(df.T)
     # Load spot coordinates
     logger.debug("Load ST coordinates")
-    coords = pd.read_csv(os.path.join(dataset_folder, "stData_Spots.csv"), index_col=0)
+    coords = pd.read_csv(dataset_folder / "stData_Spots.csv", index_col=0)
     adata_st.obsm["spatial"] = coords[["cArray0", "cArray1"]].values
     return adata_st
 

@@ -1,3 +1,5 @@
+mapping:
+  deterministic: false
 graph:
   type: knn
   k: 4
@@ -6,12 +8,9 @@ model:
   enc_hidden_dim: 64
   dec_hidden_dim: 256
   K: 20
-  hidden_gcn: 64
-  hidden_mlp: 256
 training:
   lr: 0.001
   epochs: 1
-  weight_decay: 1e-5
   dropout_decoder: 0.2
 loss_weights:
   lambda_rec_spot: 1.0

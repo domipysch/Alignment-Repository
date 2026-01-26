@@ -12,4 +12,6 @@ dependencies:
   - anndata==0.12.7
   - pytorch==2.9.1
   - pytorch_geometric==2.7.0
+  - matplotlib==3.9.2
+  - scanpy==1.11.5
 

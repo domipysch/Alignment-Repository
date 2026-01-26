@@ -7,10 +7,10 @@ import numpy as np
 from anndata import AnnData
 from scipy.spatial import cKDTree, Delaunay
 from scipy.spatial.distance import cdist
-from utils.dataset_query import get_z_real_and_predicted_data
-from utils.utils import create_adata_object
+from .utils.dataset_query import get_z_real_and_predicted_data
+from .utils.utils import create_adata_object
 import warnings
-from utils.distance_metrics import (
+from .utils.distance_metrics import (
     cosine_similarity,
     sqrt_cosine_similarity,
     getis_ord_g_stat,

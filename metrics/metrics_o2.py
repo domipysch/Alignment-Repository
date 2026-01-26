@@ -4,14 +4,12 @@ import os
 import pandas as pd
 import numpy as np
 import logging
-from utils.dataset_query import get_z_real_and_predicted_data
-from utils.utils import create_adata_object
-from utils.distance_metrics import cosine_similarity, sqrt_cosine_similarity, euclidean_l2, rmse, mae_l1, canberra, \
-    bray_curtis_distance, pearson_distance, aitchison_distance, kl_divergence, jensen_shannon_distance, \
-    hellinger_distance, bhattacharyya_distance, total_variation
 import matplotlib.pyplot as plt
 import argparse
 import json
+from .utils.dataset_query import get_z_real_and_predicted_data
+from .utils.utils import create_adata_object
+from .utils.distance_metrics import cosine_similarity
 logger = logging.getLogger(__name__)
 
 

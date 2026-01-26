@@ -5,12 +5,12 @@ import json
 import argparse
 import multiprocessing as mp
 import logging
-from utils.dataset_query import get_z_real_and_predicted_data
-from utils.utils import create_adata_object
+from .utils.dataset_query import get_z_real_and_predicted_data
+from .utils.utils import create_adata_object
 logger = logging.getLogger(__name__)
 
 
-NUM_PERMUTATIONS = 200
+NUM_PERMUTATIONS = 50
 
 # ------------- Per gene
 
@@ -217,10 +217,10 @@ def main(dataset_folder: Path, results_file: Path, metrics_folder_name: Path):
     adata_z, adata_predicted_z = create_adata_object(z_data), create_adata_object(predicted_z_data)
 
     permutation_test_per_gene(adata_z, adata_predicted_z, result_folder_permutation)
-    permutation_test_per_spot(adata_z, adata_predicted_z, result_folder_permutation)
+    # permutation_test_per_spot(adata_z, adata_predicted_z, result_folder_permutation)
 
     add_p_value_to_json(result_folder_permutation / "permutation_test_per_gene.json")
-    add_p_value_to_json(result_folder_permutation / "permutation_test_per_spot.json")
+    # add_p_value_to_json(result_folder_permutation / "permutation_test_per_spot.json")
 
 
 if __name__ == "__main__":

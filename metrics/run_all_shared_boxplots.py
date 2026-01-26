@@ -44,7 +44,7 @@ def compute_medians(paths_to_jsons: list[Path], labels: list[str]) -> dict:
     return medians
 
 
-def main(paths_to_jsons: list[Path], labls: list[str], title: str, output_path: Path = None):
+def create_shared_boxplot(paths_to_jsons: list[Path], labls: list[str], title: str, output_path: Path = None):
     """
     Create a combined boxplot from multiple JSON files.
     Values are extracted from each file and plotted as side-by-side boxplots.
@@ -83,6 +83,25 @@ def main(paths_to_jsons: list[Path], labls: list[str], title: str, output_path: 
     plt.close()
 
 
+def main(metrics_paths: list[Path], labels: list[str], output_folder: Path):
+
+    # Create shared boxplot for o2
+    create_shared_boxplot(
+        [path / "o2" / "boxplots_per_gene" / "cossim.json" for path in metrics_paths],
+        labels,
+        "o2 across runs",
+        output_path=output_folder / "o2_overall.png"
+    )
+
+    # Create shared boxplot for o4
+    create_shared_boxplot(
+        [path / "o4" / "knn" / "cossim.json" for path in metrics_paths],
+        labels,
+        "o4 across runs",
+        output_path=output_folder / "o4_overall.png"
+    )
+
+
 if __name__ == "__main__":
     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
@@ -100,18 +119,8 @@ if __name__ == "__main__":
     if len(args.metrics) != len(args.labels):
         raise ValueError("Anzahl der --paths muss gleich der Anzahl der --labels sein.")
 
-    # Create shared boxplot for o2
     main(
-        [path / "o2" / "boxplots_per_gene" / "cossim.json" for path in args.metrics],
+        args.metrics,
         args.labels,
-        "o2 across runs",
-        output_path=args.output_folder / "o2_overall.png"
-    )
-
-    # Create shared boxplot for o4
-    main(
-        [path / "o4" / "knn" / "cossim.json" for path in args.metrics],
-        args.labels,
-        "o4 across runs",
-        output_path=args.output_folder / "o4_overall.png"
+        args.output_folder
     )

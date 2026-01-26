@@ -65,6 +65,25 @@ def combined_boxplot(json_paths, labels, title, output: Path):
     plt.close(fig)
 
 
+def main(metrics_paths, labels, output_folder):
+
+    # Create shared boxplot for permutation test o2
+    combined_boxplot(
+        [path / "o2" / "permutation_test" / "permutation_test_per_gene.json" for path in metrics_paths],
+        labels,
+        "o2 permutation test across runs",
+        output_folder / "o2_permutation.png"
+    )
+
+    # Create shared boxplot for permutation test o4
+    combined_boxplot(
+        [path / "o4" / "knn" / "permutation_test.json" for path in metrics_paths],
+        labels,
+        "o4 permutation test across runs",
+        output_folder / "o4_permutation.png"
+    )
+
+
 if __name__ == "__main__":
     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 
@@ -82,19 +101,4 @@ if __name__ == "__main__":
     if len(args.metrics) != len(args.labels):
         raise ValueError("Anzahl der --paths muss gleich der Anzahl der --labels sein.")
 
-    # Create shared boxplot for permutation test o2
-    combined_boxplot(
-        [path / "o2" / "permutation_test" / "permutation_test_per_gene.json" for path in args.metrics],
-        args.labels,
-        "o2 permutation test across runs",
-        args.output_folder / "o2_permutation.png"
-    )
-
-    # Create shared boxplot for permutation test o4
-    combined_boxplot(
-        [path / "o4" / "knn" / "permutation_test.json" for path in args.metrics],
-        args.labels,
-        "o4 permutation test across runs",
-        args.output_folder / "o4_permutation.png"
-    )
-
+    main(args.metrics, args.labels, args.output_folder)

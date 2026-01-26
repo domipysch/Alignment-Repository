@@ -1,14 +1,14 @@
 from copy import copy
-from utils.dataset_query import get_shared_genes
 from pathlib import Path
 from typing import Dict
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from utils.utils import compute_basic_metrics_for_gene_groups
 import argparse
 import json
 import logging
+from .utils.utils import compute_basic_metrics_for_gene_groups
+from .utils.dataset_query import get_shared_genes
 logger = logging.getLogger(__name__)
 
 

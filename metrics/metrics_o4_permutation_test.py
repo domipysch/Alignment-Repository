@@ -1,4 +1,3 @@
-import enum
 import os
 from pathlib import Path
 import pandas as pd
@@ -6,29 +5,19 @@ import networkx as nx
 import numpy as np
 from anndata import AnnData
 import argparse
-from scipy.spatial import cKDTree, Delaunay
-from scipy.spatial.distance import cdist
-from utils.dataset_query import get_z_real_and_predicted_data
-from utils.utils import create_adata_object
-import warnings
-from utils.distance_metrics import (
+from .utils.dataset_query import get_z_real_and_predicted_data
+from .utils.utils import create_adata_object
+from .utils.distance_metrics import (
     cosine_similarity,
-    sqrt_cosine_similarity,
-    getis_ord_g_stat,
-    pearson_distance,
-    bray_curtis_distance,
-    hellinger_distance,
-    total_variation,
-    bhattacharyya_distance, smape,
 )
-from metrics_o4 import create_spatial_graph, NeighborhoodType
+from .metrics_o4 import create_spatial_graph, NeighborhoodType
 import json
 import sys
 import logging
 logger = logging.getLogger(__name__)
 
 
-NUM_PERMUTATIONS = 200
+NUM_PERMUTATIONS = 50
 
 
 def add_own_metrics_to_edges(adata_z: AnnData, adata_predicted_z: AnnData, graph: nx.Graph) -> nx.Graph:

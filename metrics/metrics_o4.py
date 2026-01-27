@@ -524,13 +524,13 @@ def add_own_metrics_to_edges(adata_z: AnnData, adata_predicted_z: AnnData, graph
     # metrics to compute (name, function)
     metrics = [
         ("cossim", cosine_similarity),
-        ("sqrt_cossim", sqrt_cosine_similarity),
-        ("pearson", pearson_distance),
-        ("bray_curtis", bray_curtis_distance),
-        ("hellinger", hellinger_distance),
-        ("bhat", bhattacharyya_distance),
-        ("tv", total_variation),
-        ("smape", smape),
+        # ("sqrt_cossim", sqrt_cosine_similarity),
+        # ("pearson", pearson_distance),
+        # ("bray_curtis", bray_curtis_distance),
+        # ("hellinger", hellinger_distance),
+        # ("bhat", bhattacharyya_distance),
+        # ("tv", total_variation),
+        # ("smape", smape),
     ]
 
     cossim_dict = {}

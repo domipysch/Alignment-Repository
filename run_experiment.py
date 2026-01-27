@@ -1,8 +1,6 @@
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
-
 import yaml
 import itertools
 import copy
@@ -35,18 +33,17 @@ def create_shared_boxplots(ids: list[int], metrics_folder: Path, output_folder: 
         )
 
 
-def run_config(dataset: Path, run_config_path: Path, metrics_folder: Path, run_permutation_tests: bool = False):
+def run_config(dataset: Path, run_config_path: Path, result_folder: Path, metrics_folder: Path, run_permutation_tests: bool = False):
     # Determine verbose flag from current logger level
     verbose_flag = logger.getEffectiveLevel() == logging.DEBUG
 
     # Run alignment (G x S)
-    predicted_gep = alternative_idea.main(dataset, run_config_path, output_path=None, verbose_logging=verbose_flag)
+    predicted_gep = alternative_idea.main(dataset, run_config_path, output_path=result_folder / "gep.csv", verbose_logging=verbose_flag)
 
     # Run individual metrics
     run_all_metrics.main(
         dataset,
         metrics_folder,
-        result_path=None,
         result_gep=predicted_gep,
         run_permutation_tests=run_permutation_tests
     )
@@ -143,7 +140,7 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
             start = time.time()
             try:
                 logger.info(f"Starting run {run_id}/{total_runs - 1} -> writing to {run_dir}")
-                run_config(dataset, run_config_path, metric_dir, run_permutation_tests=run_permutation_tests)
+                run_config(dataset, run_config_path, run_dir, metric_dir, run_permutation_tests=run_permutation_tests)
                 duration = time.time() - start
                 writer.writerow([run_id, str(run_config_path), str(result_path), "ok", f"{duration:.3f}", ""])
                 logger.info(f"Run {run_id} completed in {duration:.2f}s")

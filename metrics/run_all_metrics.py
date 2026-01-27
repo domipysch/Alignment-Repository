@@ -2,7 +2,6 @@ import argparse
 from pathlib import Path
 import logging
 import sys
-from typing import Optional
 from anndata import AnnData
 from MPA_Code.utils.io import csv_to_anndata
 from MPA_Code.metrics.metrics_o1 import main as main1
@@ -13,12 +12,11 @@ from MPA_Code.metrics.metrics_o4_permutation_test import main as main4permutatio
 logger = logging.getLogger(__name__)
 
 
-def main(dataset: Path, metrics: Path, result_path: Optional[Path], result_gep: Optional[AnnData], run_permutation_tests: bool = False):
+def main(dataset: Path, metrics: Path, result_gep: AnnData, run_permutation_tests: bool = False):
     """
 
     Args:
         dataset:
-        result_path:
         result_gep: Predicted Z' (G x S)
         metrics:
         run_permutation_tests:
@@ -26,12 +24,6 @@ def main(dataset: Path, metrics: Path, result_path: Optional[Path], result_gep: 
     Returns:
 
     """
-    assert (result_path is not None) != (result_gep is not None), "Either result_path or result_gep must be provided, but not both."
-
-    # Load result GEP if only path is provided
-    if result_path is not None:
-        result_gep = csv_to_anndata(args.result, transpose=False)
-
     # Run metrics computations
     main1(dataset, result_gep, metrics)
     main2(dataset, result_gep, metrics)
@@ -58,4 +50,7 @@ if __name__ == "__main__":
     logger.info("Result file path: %s", args.result)
     logger.info("Metrics output folder: %s", args.metrics)
 
-    main(args.dataset, args.metrics, args.result, None, run_permutation_tests=True)
+    # Load result GEP
+    result_gep = csv_to_anndata(args.result, transpose=False)
+
+    main(args.dataset, args.metrics, result_gep, run_permutation_tests=False)

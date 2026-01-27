@@ -26,13 +26,10 @@ def compute_norm_per_vector(vectors_df: pd.DataFrame) -> np.ndarray:
     return norms.astype(float).to_numpy()
 
 
-def compute_log_norm_per_vector(vectors_df: pd.DataFrame) -> np.ndarray:
-    arr = compute_norm_per_vector(vectors_df)
-    if arr.size == 0:
-        return arr
+def compute_log_norm_per_vector(norm_vectors: np.ndarray) -> np.ndarray:
     # log(0) behandeln -> -inf vermeiden, setze zu 0
     with np.errstate(divide="ignore"):
-        log_arr = np.where(arr <= 0, 0.0, np.log(arr))
+        log_arr = np.where(norm_vectors <= 0, 0.0, np.log(norm_vectors))
     return log_arr
 
 
@@ -45,7 +42,7 @@ def compute_vector_metrics(vectors_df: pd.DataFrame) -> Dict[str, float]:
         Dict with basic statistics of vector norms.
     """
     arr = compute_norm_per_vector(vectors_df)
-    log_arr = compute_log_norm_per_vector(vectors_df)
+    log_arr = compute_log_norm_per_vector(arr)
 
     def safe_min(a):
         return float(np.min(a)) if a.size > 0 else 0.0
@@ -102,9 +99,9 @@ def compute_basic_metrics_for_gene_groups(
 
     # Compute norms and log norms as numpy-arrays
     norms_marker = compute_norm_per_vector(marker_vectors)
+    log_norms_marker = compute_log_norm_per_vector(norms_marker)
     norms_non_marker = compute_norm_per_vector(non_marker_vectors)
-    log_norms_marker = compute_log_norm_per_vector(marker_vectors)
-    log_norms_non_marker = compute_log_norm_per_vector(non_marker_vectors)
+    log_norms_non_marker = compute_log_norm_per_vector(norms_non_marker)
     cohen_d_norm = cohens_d(norms_marker, norms_non_marker)
     cohen_d_log_norm = cohens_d(log_norms_marker, log_norms_non_marker)
 

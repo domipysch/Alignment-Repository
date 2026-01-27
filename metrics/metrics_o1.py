@@ -50,7 +50,7 @@ def compute_metrics_o1(dataset_folder: Path, result_gep: AnnData) -> Dict[str, f
     if not dataset_folder.exists():
         raise FileNotFoundError(f"Datensatzordner nicht gefunden: {dataset_folder}")
 
-    genes = result_gep.var_names
+    genes = result_gep.obs_names
 
     # Split genes in marker and non-marker genes
     marker_genes = set(get_shared_genes(dataset_folder))
@@ -252,7 +252,7 @@ def create_log_norms_boxplots(metrics_result: Dict, out_path: Path = None, show:
     plt.close(fig)
 
 
-def main(dataset_folder: Path, result_gep: AnnData, metrics_output_path: Path):
+def main(dataset_folder: Path, result_gep: AnnData, metrics_output_path: Path, compute_scRNA_metrics: bool = False):
     """
     Compute metrics for objective 1 and save results as JSON files / Diagrams.
 
@@ -269,33 +269,63 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_output_path: Path):
     """
     logger.info("Compute metrics for o1")
 
-    # Compute metrics on scRNA data
-    res_scrna = compute_metrics_scRNA(dataset_folder)
+    if compute_scRNA_metrics:
+        # Compute metrics on scRNA data
+        res_scrna = compute_metrics_scRNA(dataset_folder)
 
-    # Save result
-    metrics_output_path.mkdir(parents=True, exist_ok=True)
-    out_path = metrics_output_path / "scRNA_Metrics.json"
-    to_save = copy(res_scrna)
-    # del to_save["marker_norms"]
-    # del to_save["non_marker_norms"]
-    with open(out_path, "w") as fh:
-        json.dump(
-            json.loads(
-                json.dumps(
-                    to_save,
-                    default=lambda o: o.tolist() if hasattr(o, "tolist") else float(o)
-                )
-            ),
-            fh,
-            indent=4,
+        # Save result
+        metrics_output_path.mkdir(parents=True, exist_ok=True)
+        out_path = metrics_output_path / "scRNA_Metrics.json"
+        to_save = copy(res_scrna)
+        # del to_save["marker_norms"]
+        # del to_save["non_marker_norms"]
+        with open(out_path, "w") as fh:
+            json.dump(
+                json.loads(
+                    json.dumps(
+                        to_save,
+                        default=lambda o: o.tolist() if hasattr(o, "tolist") else float(o)
+                    )
+                ),
+                fh,
+                indent=4,
+            )
+
+        # Save result
+        scrna_dir = metrics_output_path / "scRNA"
+        scrna_dir.mkdir(parents=True, exist_ok=True)
+
+        # Crate some diagrams on metrics of scRNA
+        create_norms_histograms(
+            res_scrna,
+            out_path=scrna_dir / "scRNA_norms_histogram.png",
+            show=False,
+            bins=100
+        )
+
+        create_log_norms_histograms(
+            res_scrna,
+            out_path=scrna_dir / "scRNA_log_norms_histogram.png",
+            show=False,
+            bins=100
+        )
+
+        create_norms_boxplots(
+            res_scrna,
+            out_path=scrna_dir / "scRNA_norms_boxplot.png",
+            show=False
+        )
+
+        create_log_norms_boxplots(
+            res_scrna,
+            out_path=scrna_dir / "scRNA_log_norms_boxplot.png",
+            show=False
         )
 
     # Compute metrics for o1
     res = compute_metrics_o1(dataset_folder, result_gep)
 
     # Save result
-    scrna_dir = metrics_output_path / "scRNA"
-    scrna_dir.mkdir(parents=True, exist_ok=True)
     metrics_dir = metrics_output_path / "o1"
     metrics_dir.mkdir(parents=True, exist_ok=True)
     out_path = metrics_dir / "o1_metrics.json"
@@ -313,34 +343,6 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_output_path: Path):
             fh,
             indent=4,
         )
-
-
-    # Crate some diagrams on metrics of scRNA
-    create_norms_histograms(
-        res_scrna,
-        out_path=scrna_dir / "scRNA_norms_histogram.png",
-        show=False,
-        bins=100
-    )
-
-    create_log_norms_histograms(
-        res_scrna,
-        out_path=scrna_dir / "scRNA_log_norms_histogram.png",
-        show=False,
-        bins=100
-    )
-
-    create_norms_boxplots(
-        res_scrna,
-        out_path=scrna_dir / "scRNA_norms_boxplot.png",
-        show=False
-    )
-
-    create_log_norms_boxplots(
-        res_scrna,
-        out_path=scrna_dir / "scRNA_log_norms_boxplot.png",
-        show=False
-    )
 
     # Crate some diagrams on o1 metrics
     create_norms_histograms(

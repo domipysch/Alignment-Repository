@@ -15,7 +15,6 @@ from MPA_Code.alternative_idea.src.loss import AlternativeIdeaLoss
 from MPA_Code.alternative_idea.src.spatial_graph import build_spatial_graph, SpatialGraphType
 from MPA_Code.alternative_idea.src.dataset import prepare_tensors_from_input
 from MPA_Code.alternative_idea.src.utils import graph_type_from_config
-from scipy.sparse import issparse
 logger = logging.getLogger(__name__)
 
 
@@ -99,7 +98,7 @@ def alternative_idea_compute_mapping(
     adata_st: AnnData,
     verbose_logging: bool,
     use_device: str = None,
-) -> AnnData:
+) -> torch.Tensor:
 
     # 1. Load Config
     logger.debug(f"Load config: {path_to_config}")
@@ -210,7 +209,7 @@ def alternative_idea_compute_mapping(
                 logger.info(f"Epoch {epoch:03d} | Total Loss: {total_loss.item():.4f}")
 
     logger.info("Alignment complete.")
-    return AnnData(X=A.detach().cpu().numpy())
+    return A
 
 
 def main(
@@ -220,48 +219,43 @@ def main(
     verbose_logging: bool = False
 ) -> AnnData:
 
+    TORCH_DEVICE = "mps"
+
     # Step 1: Load data
-    logger.debug("Load input scRNA an ST data...")
+    logger.info("Load input scRNA and ST data...")
     adata_sc = load_sc_adata(dataset_folder)  # C x G
     adata_st = load_st_adata(dataset_folder)  # S x G
     logger.info("Loaded input scRNA and ST data.")
 
     # Step 2: Map data using AlternativeIdea
-    spot_to_cell_map = alternative_idea_compute_mapping(
+    spot_to_cell_map: torch.Tensor = alternative_idea_compute_mapping(
         config_path,
         adata_sc,
         adata_st,
         verbose_logging=verbose_logging,
-        use_device="cpu"
+        use_device=TORCH_DEVICE
     )  # S x C
     logger.info("Obtained spot-to-cell mapping AnnData.")
-    assert spot_to_cell_map.X.shape == (adata_st.n_obs, adata_sc.n_obs), "dims passen nicht"
+    assert spot_to_cell_map.shape == (adata_st.n_obs, adata_sc.n_obs), "dims passen nicht"
 
     # Step 3 (optional): Apply one-hot encoding to mapping
     mapping_config, _, _, _, _ = load_config(config_path)
     logger.info("Apply deterministic mapping" if mapping_config["deterministic"] else "Keep probabilistic mapping")
     if mapping_config["deterministic"]:
-
-        # For each row (spot) in ad_map, set the max value to 1 and all others to 0
-        if issparse(spot_to_cell_map.X):
-            mat = torch.from_numpy(spot_to_cell_map.X.toarray())
-        else:
-            mat = torch.as_tensor(spot_to_cell_map.X)
-
-        argmax_idx = torch.argmax(mat, dim=1, keepdim=True)  # for each spot (column), index of max cell / cell type
-        one_hot = torch.zeros_like(mat)
-        one_hot.scatter_(1, argmax_idx, 1.0)
-        spot_to_cell_map.X = one_hot.detach().cpu().numpy()
+        argmax_idx = torch.argmax(spot_to_cell_map, dim=1, keepdim=True)  # for each spot (column), index of max cell / cell type
+        spot_to_cell_map = torch.zeros_like(spot_to_cell_map)
+        spot_to_cell_map.scatter_(1, argmax_idx, 1.0)
 
     # Step 4: Compute Z' out of the mapping (expected gene expression per spot, scRNA data weighted by mapping)
-    predicted_spot_expressions = spot_to_cell_map.X @ adata_sc.X  # S x G
+    adata_sc_tensor = torch.as_tensor(adata_sc.X, dtype=torch.float32, device=TORCH_DEVICE)
+    predicted_spot_expressions = spot_to_cell_map @ adata_sc_tensor  # S x G
 
     # Transpose to G x S
-    predicted_spot_expressions = predicted_spot_expressions.transpose()  # now G x S
+    predicted_spot_expressions = predicted_spot_expressions.T  # now G x S
     assert predicted_spot_expressions.shape == (adata_sc.n_vars, adata_st.n_obs), "dims passen nicht"
 
     # Create AnnData object for predicted spot expressions
-    adata_result = AnnData(X=predicted_spot_expressions)
+    adata_result = AnnData(X=predicted_spot_expressions.detach().cpu().numpy())
     adata_result.obs_names = adata_sc.var_names
     adata_result.var_names = adata_st.obs_names
 

@@ -1,7 +1,6 @@
 mapping:
   deterministic:
     - false
-    - true
 graph:
   type: knn
   k:
@@ -9,7 +8,6 @@ graph:
 model:
   d:
     - 16
-    - 32
   enc_hidden_dim:
     - 64
   dec_hidden_dim:
@@ -19,9 +17,8 @@ model:
 training:
   lr:
     - 0.001
-    - 0.005
   epochs:
-    - 200
+    - 20
   dropout_decoder:
     - 0.2
 loss_weights:

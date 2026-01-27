@@ -2,8 +2,9 @@ import argparse
 import sys
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
 import yaml
+import scanpy as sc
 import torch
 import torch.optim as optim
 import logging
@@ -15,6 +16,7 @@ from MPA_Code.alternative_idea.src.loss import AlternativeIdeaLoss
 from MPA_Code.alternative_idea.src.spatial_graph import build_spatial_graph, SpatialGraphType
 from MPA_Code.alternative_idea.src.dataset import prepare_tensors_from_input
 from MPA_Code.alternative_idea.src.utils import graph_type_from_config
+import matplotlib.pyplot as plt
 logger = logging.getLogger(__name__)
 
 
@@ -98,7 +100,7 @@ def alternative_idea_compute_mapping(
     adata_st: AnnData,
     verbose_logging: bool,
     use_device: str = None,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, List[float]]:
 
     # 1. Load Config
     logger.debug(f"Load config: {path_to_config}")
@@ -122,13 +124,20 @@ def alternative_idea_compute_mapping(
         device = torch.device(use_device)
     logger.info(f"Using device: {device}")
 
-    # 3. Convert input anndata to tensors
+    # 3. Preprocess data (only for mapping): Normalize & Log-transform
+    logger.info("Normalize & Log-transform gene expression and spatial data")
+    sc.pp.normalize_total(adata_sc)
+    sc.pp.normalize_total(adata_st)
+    sc.pp.log1p(adata_sc)
+    sc.pp.log1p(adata_st)
+
+    # 4. Convert input anndata to tensors
     logger.debug("Prepare input tensors for model...")
     X, Z, X_shared, Z_shared = prepare_tensors_from_input(adata_sc, adata_st, device)
     logger.info("Prepared input tensors for model.")
     logger.info(f"Shared genes between scRNA and ST: {X_shared.shape[1]}")
 
-    # 4. Build the spatial graph out of Z
+    # 5. Build the spatial graph out of Z
     graph_type = graph_type_from_config(graph_config)
     k = graph_config["k"] if graph_type in (SpatialGraphType.KNN, SpatialGraphType.MUTUAL_KNN) else None
     radius = graph_config["radius"] if graph_type == SpatialGraphType.RADIUS else None
@@ -141,7 +150,7 @@ def alternative_idea_compute_mapping(
     )
     logger.info(f"Created spatial graph of type {graph_config['type']}.")
 
-    # 5. Initialize Model
+    # 6. Initialize Model
     # Dimensions derived from tensors
     num_spots, g_st = Z.shape
     num_cells, g_sc = X.shape
@@ -162,7 +171,7 @@ def alternative_idea_compute_mapping(
         dropout_rate_decoder=training_config["dropout_decoder"],
     ).to(device)
 
-    # 6. Initialize Loss and Optimizer
+    # 7. Initialize Loss and Optimizer
     loss = AlternativeIdeaLoss(
         lambda_rec_spot=loss_weights["lambda_rec_spot"],
         lambda_rec_state=loss_weights["lambda_rec_state"],
@@ -173,10 +182,11 @@ def alternative_idea_compute_mapping(
 
     optimizer = optim.Adam(model.parameters(), lr=training_config["lr"])
 
-    # 7. Training Loop
-    logger.info("Starting training loop")
+    # 8. Training Loop
+    logger.info("Starting optimization loop")
     model.train()
 
+    losses: List[float] = []
     for epoch in range(int(training_config["epochs"])):
         optimizer.zero_grad()
 
@@ -201,6 +211,9 @@ def alternative_idea_compute_mapping(
         total_loss.backward()
         optimizer.step()
 
+        # Collect loss value
+        losses.append(float(total_loss.item()))
+
         # Logging: verbose -> log every epoch at DEBUG, normal -> log every 10 epochs at INFO
         if verbose_logging:
             logger.debug(f"Epoch {epoch:03d} | Total Loss: {total_loss.item():.4f}")
@@ -209,7 +222,7 @@ def alternative_idea_compute_mapping(
                 logger.info(f"Epoch {epoch:03d} | Total Loss: {total_loss.item():.4f}")
 
     logger.info("Alignment complete.")
-    return A
+    return A, losses
 
 
 def main(
@@ -228,15 +241,29 @@ def main(
     logger.info("Loaded input scRNA and ST data.")
 
     # Step 2: Map data using AlternativeIdea
-    spot_to_cell_map: torch.Tensor = alternative_idea_compute_mapping(
+    spot_to_cell_map: torch.Tensor
+    spot_to_cell_map, losses = alternative_idea_compute_mapping(
         config_path,
-        adata_sc,
-        adata_st,
+        adata_sc.copy(),
+        adata_st.copy(),
         verbose_logging=verbose_logging,
         use_device=TORCH_DEVICE
-    )  # S x C
+    )  # S x C, plus loss history
     logger.info("Obtained spot-to-cell mapping AnnData.")
     assert spot_to_cell_map.shape == (adata_st.n_obs, adata_sc.n_obs), "dims passen nicht"
+
+    # Create and save loss curve figure
+    loss_fig_path = config_path.parent / "loss–curve.png"
+    plt.figure()
+    plt.plot(range(len(losses)), losses, marker='o', linewidth=1)
+    plt.xlabel("Epoch")
+    plt.ylabel("Total Loss")
+    plt.title("Loss Curve")
+    plt.grid(True)
+    plt.tight_layout()
+    plt.savefig(str(loss_fig_path))
+    plt.close()
+    logger.info(f"Saved loss curve to {loss_fig_path}")
 
     # Step 3 (optional): Apply one-hot encoding to mapping
     mapping_config, _, _, _, _ = load_config(config_path)

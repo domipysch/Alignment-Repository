@@ -16,14 +16,15 @@ model:
     - 20
 training:
   lr:
-    - 0.001
+    - 0.005
   epochs:
-    - 20
+    - 500
   dropout_decoder:
     - 0.2
 loss_weights:
   lambda_rec_spot:
     - 1.0
+    - 2.0
   lambda_rec_state:
     - 1.0
   lambda_clust:

@@ -7,10 +7,9 @@ import numpy as np
 from anndata import AnnData
 from scipy.spatial import cKDTree, Delaunay
 from scipy.spatial.distance import cdist
-from .utils.dataset_query import get_z_real_and_predicted_data
-from .utils.utils import create_adata_object
+from MPA_Code.metrics.utils.dataset_query import get_z_real_and_predicted_data_only_shared_genes
 import warnings
-from .utils.distance_metrics import (
+from MPA_Code.metrics.utils.distance_metrics import (
     cosine_similarity,
     sqrt_cosine_similarity,
     getis_ord_g_stat,
@@ -24,7 +23,6 @@ import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
 from matplotlib.colors import Normalize
 from matplotlib import cm
-import argparse
 import json
 import logging
 logger = logging.getLogger(__name__)
@@ -764,7 +762,7 @@ def plot_edge_cossim_spatial(
     plt.close(fig)
 
 
-def main(dataset_folder: Path, results_path: Path, metrics_output_folder: Path):
+def main(dataset_folder: Path, result_gep: AnnData, metrics_output_folder: Path):
     """
     Compute metrics for objective 4 and save results as JSON files / diagrams.
 
@@ -774,7 +772,7 @@ def main(dataset_folder: Path, results_path: Path, metrics_output_folder: Path):
 
     Args:
         dataset_folder: Path to dataset folder
-        results_path:
+        result_gep: G x S
         metrics_output_folder:
 
     Returns: None
@@ -791,11 +789,11 @@ def main(dataset_folder: Path, results_path: Path, metrics_output_folder: Path):
 
     result_own_knn_cossim_file = output_folder_knn / "cossim.json"
 
-    z_data, predicted_z_data = get_z_real_and_predicted_data(dataset_folder, results_path)
+    # S x shared G
+    adata_z, adata_predicted_z = get_z_real_and_predicted_data_only_shared_genes(dataset_folder, result_gep)
     # Assert that both DataFrames have the same shape of genes and spots
-    assert z_data.shape == predicted_z_data.shape, "DataFrames haben unterschiedliche Formen."
-    # Create AnnData objects
-    adata_z, adata_predicted_z = create_adata_object(z_data), create_adata_object(predicted_z_data)
+    assert adata_z.shape == adata_predicted_z.shape, "DataFrames haben unterschiedliche Formen."
+    assert adata_z.n_obs == result_gep.n_vars
 
     # KNN
     graph = create_spatial_graph(dataset_folder, neighborhood_type=NeighborhoodType.KNN, k=4)
@@ -809,16 +807,3 @@ def main(dataset_folder: Path, results_path: Path, metrics_output_folder: Path):
         graph,
         output_folder=output_folder_knn,
     )
-
-if __name__ == "__main__":
-    # Configure basic logging
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-    logger = logging.getLogger(__name__)
-
-    parser = argparse.ArgumentParser(description="Run metric 3 on a result file")
-    parser.add_argument('-d', '--dataset', type=Path, help='Path to dataset folder')
-    parser.add_argument('-r', '--result', type=Path, help='Path to result file')
-    parser.add_argument('-m', '--metrics', type=Path, help='Path to output metric folder')
-    args = parser.parse_args()
-
-    main(args.dataset, args.result, args.metrics)

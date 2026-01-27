@@ -4,10 +4,6 @@ import pandas as pd
 import scanpy as sc
 
 
-def create_adata_object(df: pd.DataFrame) -> sc.AnnData:
-    return sc.AnnData(X=df.T.values, obs=pd.DataFrame(index=df.columns), var=pd.DataFrame(index=df.index))
-
-
 def cohens_d(a: np.ndarray, b: np.ndarray) -> float:
     """
     Compute Cohen's d effect size between two 1D numpy arrays.

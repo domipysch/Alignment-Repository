@@ -44,9 +44,13 @@ def load_st_adata(dataset_folder: str) -> ad.AnnData:
 
 if __name__ == "__main__":
 
-    dataset_from = "/Users/domi/Dev/MPA_Workspace/MPA_DATA/03_MouseSSP"
-    dataset_to = "/Users/domi/Dev/MPA_Workspace/MPA_DATA/03_MouseSSP_Mini"
-    target_nr = 10
+    dataset_from = "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_Datasets/03_MouseSSP"
+    dataset_to = "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_Datasets/03_MouseSSP_Mini_2"
+    target_nr_sc_cells = 15
+    target_nr_sc_genes = 30
+    target_nr_st_spots = 10
+    target_nr_st_genes = 20
+    target_nr_shared_genes = 5
 
     rng = np.random.default_rng()  # Zufallszahlengenerator für reproduzierbares Sampling (ohne festen Seed)
 
@@ -62,21 +66,21 @@ if __name__ == "__main__":
     stNonSharedGenes = stData.var_names.difference(sharedGenes)
 
     # 3. Create list of genes to keep (of length target_nr, half shared, half non-shared)
-    scGenesToKeep = list(sharedGenes[:target_nr // 2]) + list(scNonSharedGenes[:target_nr // 2])
-    if len(stNonSharedGenes) >= target_nr // 2:
-        stGenesToKeep = list(sharedGenes[:target_nr // 2]) + list(stNonSharedGenes[:target_nr // 2])
+    scGenesToKeep = list(sharedGenes[:target_nr_shared_genes]) + list(scNonSharedGenes[:target_nr_sc_genes - target_nr_shared_genes])
+    if len(stNonSharedGenes) >= target_nr_shared_genes:
+        stGenesToKeep = list(sharedGenes[:target_nr_shared_genes]) + list(stNonSharedGenes[:target_nr_st_genes - target_nr_shared_genes])
     else:
-        stGenesToKeep = list(sharedGenes[:target_nr])
+        stGenesToKeep = list(sharedGenes[:target_nr_st_genes])
 
     # 4. Select cells from scRNA data that contain expression for at least one shared gene each (at random, target_nr many)
     # robust handling für dichte und sparse .X
-    sc_mat = scData[:, sharedGenes].X
+    sc_mat = scData[:, sharedGenes[:target_nr_shared_genes]].X
     if issparse(sc_mat):
         sc_mask = np.asarray(sc_mat.getnnz(axis=1) > 0).reshape(-1)
     else:
         sc_mask = np.any(sc_mat != 0, axis=1).reshape(-1)
     available_sc = scData.obs_names[sc_mask].tolist()
-    n_sc = min(len(available_sc), target_nr)
+    n_sc = min(len(available_sc), target_nr_sc_cells)
     scCellsToKeep = rng.choice(available_sc, size=n_sc, replace=False).tolist()
 
     # 5. Select spots from ST data that contain expression for at least one shared gene each (at random, target_nr many)
@@ -86,7 +90,7 @@ if __name__ == "__main__":
     else:
         st_mask = np.any(st_mat != 0, axis=1).reshape(-1)
     available_st = stData.obs_names[st_mask].tolist()
-    n_st = min(len(available_st), target_nr)
+    n_st = min(len(available_st), target_nr_st_spots)
     stSpotsToKeep = rng.choice(available_st, size=n_st, replace=False).tolist()
 
     # 6. Create mini scRNA + ST datasets

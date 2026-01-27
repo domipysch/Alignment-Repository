@@ -5,11 +5,10 @@ import pandas as pd
 import numpy as np
 import logging
 import matplotlib.pyplot as plt
-import argparse
 import json
-from .utils.dataset_query import get_z_real_and_predicted_data
-from .utils.utils import create_adata_object
-from .utils.distance_metrics import cosine_similarity
+from anndata import AnnData
+from MPA_Code.metrics.utils.dataset_query import get_z_real_and_predicted_data_only_shared_genes
+from MPA_Code.metrics.utils.distance_metrics import cosine_similarity
 logger = logging.getLogger(__name__)
 
 
@@ -571,7 +570,7 @@ def plot_delta_map(adata_z, adata_predicted_z, gene_name: str, mode: str = "rela
     plt.close(fig)
 
 
-def main(dataset_folder: Path, results_path: Path, metrics_output_folder: Path):
+def main(dataset_folder: Path, result_gep: AnnData, metrics_output_folder: Path):
     """
     Compute metrics for objective 3 and save results as JSON files / diagrams.
 
@@ -581,7 +580,7 @@ def main(dataset_folder: Path, results_path: Path, metrics_output_folder: Path):
 
     Args:
         dataset_folder: Path to dataset folder
-        results_path:
+        result_gep: G x S predicted gene expression AnnData
         metrics_output_folder: 
 
     Returns: None
@@ -601,13 +600,10 @@ def main(dataset_folder: Path, results_path: Path, metrics_output_folder: Path):
     os.makedirs(metrics_folder_spatial_per_gene, exist_ok=True)
 
     # Load data (input ST and predicted)
-    z_data, predicted_z_data = get_z_real_and_predicted_data(dataset_folder, results_path)
+    adata_z, adata_predicted_z = get_z_real_and_predicted_data_only_shared_genes(dataset_folder, result_gep)
 
     # Assert that both DataFrames have the same shape of genes and spots
-    assert z_data.shape == predicted_z_data.shape, "DataFrames haben unterschiedliche Formen."
-
-    # Create AnnData objects
-    adata_z, adata_predicted_z = create_adata_object(z_data), create_adata_object(predicted_z_data)
+    assert adata_z.shape == adata_predicted_z.shape, "DataFrames haben unterschiedliche Formen."
 
     # Add spatial locations to AnnData objects
     coords_path = dataset_folder / "stData_Spots.csv"
@@ -619,7 +615,7 @@ def main(dataset_folder: Path, results_path: Path, metrics_output_folder: Path):
     # Compute and store cossim per gene in adata_predicted_z.var
     compute_metrics_per_gene(adata_z, adata_predicted_z, save_cossim_json=metrics_cossim_per_gene_json)
 
-    generate_spatial_distribution_plots_for_some_genes(adata_z, adata_predicted_z, metrics_folder_spatial_per_gene)
+    # generate_spatial_distribution_plots_for_some_genes(adata_z, adata_predicted_z, metrics_folder_spatial_per_gene)
 
     # Generate boxplot per gene
     generate_box_plot_metrics_per_gene(
@@ -635,17 +631,3 @@ def main(dataset_folder: Path, results_path: Path, metrics_output_folder: Path):
         adata_predicted_z,
         output_folder=metrics_folder_boxplots_per_spot,
     )
-
-
-if __name__ == "__main__":
-    # Configure basic logging
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-    logger = logging.getLogger(__name__)
-
-    parser = argparse.ArgumentParser(description="Run metrics for objective 2 on a result file")
-    parser.add_argument('-d', '--dataset', type=Path, help='Path to dataset folder')
-    parser.add_argument('-r', '--result', type=Path, help='Path to result file')
-    parser.add_argument('-m', '--metrics', type=Path, help='Path to output metric folder')
-    args = parser.parse_args()
-
-    main(args.dataset, args.result, args.metrics)

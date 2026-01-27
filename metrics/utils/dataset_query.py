@@ -1,6 +1,8 @@
 from typing import List, Tuple
 from pathlib import Path
 import pandas as pd
+from anndata import AnnData
+from MPA_Code.utils.io import csv_to_anndata
 
 
 def get_sc_genes(dataset_folder: Path) -> List[str]:
@@ -75,16 +77,16 @@ def get_cell_annotations(dataset_folder: Path) -> pd.DataFrame:
     return df_annotations
 
 
-def get_z_real_and_predicted_data(dataset_folder: Path, result_file: Path) -> Tuple[pd.DataFrame, pd.DataFrame]:
+def get_z_real_and_predicted_data_only_shared_genes(dataset_folder: Path, result_gep: AnnData) -> Tuple[AnnData, AnnData]:
     """
     Read input ST data and predicted Z' data from result file, filter both to shared marker genes only.
 
     Args:
         dataset_folder: pathlib.Path zum Dataset-Ordner
-        result_file: Path zur Ergebnisdatei
+        result_gep: G x S
 
     Returns:
-        Two DataFrames (ST data, Z' data).
+        Two anndata (ST data, Z' data), S x shared G.
     """
 
     # Check if file exists
@@ -92,24 +94,20 @@ def get_z_real_and_predicted_data(dataset_folder: Path, result_file: Path) -> Tu
     if not st_path.exists():
         raise FileNotFoundError(f"Ergebnisdatei nicht gefunden: {st_path}")
 
-    # Check if result file exists
-    if not result_file.exists():
-        raise FileNotFoundError(f"Ergebnisdatei nicht gefunden: {result_file}")
-
     # ST data DataFrames einlesen
-    df_st = pd.read_csv(st_path, header=0, index_col=0)
-
-    # Z' DataFrame aus Ergebnisdatei einlesen
-    df_res = pd.read_csv(result_file, header=0, index_col=0)
+    st_ad = csv_to_anndata(st_path, transpose=True)
+    result_gep = result_gep.transpose()
 
     # Filtern nach marker genes
     marker_genes = set(get_shared_genes(dataset_folder))
-    df_st = df_st.loc[df_st.index.isin(marker_genes)]
-    df_res = df_res.loc[df_res.index.isin(marker_genes)]
 
-    # Reindex to same order
-    df_res = df_res.reindex(index=df_st.index, columns=df_st.columns)
-    assert df_st.index.equals(df_res.index), "Gene sind nicht in der gleichen Reihenfolge oder nicht identisch."
-    assert df_st.columns.equals(df_res.columns), "Spots sind nicht in der gleichen Reihenfolge oder nicht identisch."
+    # Bestimme gemeinsame Gene in der Reihenfolge von st_ad
+    common_genes = [g for g in st_ad.var_names if g in marker_genes and g in result_gep.var_names]
+    st_shared_ad = st_ad[:, common_genes].copy()
+    result_shared_gep = result_gep[:, common_genes].copy()
 
-    return df_st, df_res
+    # Sicherstellen, dass Reihenfolge und Identität übereinstimmen
+    assert st_shared_ad.var_names.equals(result_shared_gep.var_names), "Gene sind nicht in der gleichen Reihenfolge oder nicht identisch."
+
+    return st_shared_ad, result_shared_gep
+

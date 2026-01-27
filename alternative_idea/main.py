@@ -2,19 +2,20 @@ import argparse
 import sys
 import os
 from pathlib import Path
+from typing import Optional
 import yaml
 import torch
 import torch.optim as optim
 import logging
 from anndata import AnnData
-from .src.utils import load_sc_adata, load_st_adata, fmt_nonzero_4
-from .src.model import AlternativeIdeaModel
-from .src.loss import AlternativeIdeaLoss
-from .src.spatial_graph import build_spatial_graph, SpatialGraphType
-from .src.dataset import prepare_tensors_from_input
-from .src.utils import graph_type_from_config
+from MPA_Code.utils.io import anndata_to_csv
+from MPA_Code.alternative_idea.src.utils import load_sc_adata, load_st_adata, fmt_nonzero_4
+from MPA_Code.alternative_idea.src.model import AlternativeIdeaModel
+from MPA_Code.alternative_idea.src.loss import AlternativeIdeaLoss
+from MPA_Code.alternative_idea.src.spatial_graph import build_spatial_graph, SpatialGraphType
+from MPA_Code.alternative_idea.src.dataset import prepare_tensors_from_input
+from MPA_Code.alternative_idea.src.utils import graph_type_from_config
 from scipy.sparse import issparse
-import pandas as pd
 logger = logging.getLogger(__name__)
 
 
@@ -215,17 +216,17 @@ def alternative_idea_compute_mapping(
 def main(
     dataset_folder: Path,
     config_path: Path,
-    output_path: Path,
+    output_path: Optional[Path],
     verbose_logging: bool = False
-):
+) -> AnnData:
 
-    # Step 3: Load data
+    # Step 1: Load data
     logger.debug("Load input scRNA an ST data...")
     adata_sc = load_sc_adata(dataset_folder)  # C x G
     adata_st = load_st_adata(dataset_folder)  # S x G
     logger.info("Loaded input scRNA and ST data.")
 
-    # Step 4: Map data using AlternativeIdea
+    # Step 2: Map data using AlternativeIdea
     spot_to_cell_map = alternative_idea_compute_mapping(
         config_path,
         adata_sc,
@@ -236,7 +237,7 @@ def main(
     logger.info("Obtained spot-to-cell mapping AnnData.")
     assert spot_to_cell_map.X.shape == (adata_st.n_obs, adata_sc.n_obs), "dims passen nicht"
 
-    # Step 5 (optional): Apply one-hot encoding to mapping
+    # Step 3 (optional): Apply one-hot encoding to mapping
     mapping_config, _, _, _, _ = load_config(config_path)
     logger.info("Apply deterministic mapping" if mapping_config["deterministic"] else "Keep probabilistic mapping")
     if mapping_config["deterministic"]:
@@ -252,44 +253,55 @@ def main(
         one_hot.scatter_(1, argmax_idx, 1.0)
         spot_to_cell_map.X = one_hot.detach().cpu().numpy()
 
-    # Step 6: Compute Z' out of the mapping (expected gene expression per spot, scRNA data weighted by mapping)
+    # Step 4: Compute Z' out of the mapping (expected gene expression per spot, scRNA data weighted by mapping)
     predicted_spot_expressions = spot_to_cell_map.X @ adata_sc.X  # S x G
 
     # Transpose to G x S
     predicted_spot_expressions = predicted_spot_expressions.transpose()  # now G x S
     assert predicted_spot_expressions.shape == (adata_sc.n_vars, adata_st.n_obs), "dims passen nicht"
 
-    # Step 6: Export predicted_spot_expressions to CSV
+    # Create AnnData object for predicted spot expressions
+    adata_result = AnnData(X=predicted_spot_expressions)
+    adata_result.obs_names = adata_sc.var_names
+    adata_result.var_names = adata_st.obs_names
+
+    # Step 5 (optional): Export predicted_spot_expressions to CSV
     # - Rows: Genes
     # - Columns: Spots
-    # - Top left cell = "GEP"
-    logger.info(f"Write result GEP to CSV: {output_path}")
-    df = pd.DataFrame(
-        predicted_spot_expressions,
-        index=list(s.upper() for s in adata_sc.var_names),
-        columns=adata_st.obs_names,
-    )
-    df_formatted = df.map(fmt_nonzero_4)
-    df_formatted.to_csv(output_path, index=True, index_label="GEP")  # "GEP" in cell 0,0
-    logger.info(f"Saved result GEP to {output_path}")
+    if output_path is not None:
+        logger.info(f"Write result GEP to CSV: {output_path}")
+        anndata_to_csv(
+            adata_result,
+            output_path,
+            top_left_label="GEP",
+            format_func=fmt_nonzero_4,
+            uppercase_var_names=True,
+        )
+        logger.info(f"Saved result GEP to {output_path}")
+    else:
+        logger.debug("No output path provided, skipping CSV export.")
+
+    # Step 6: Return result
+    return adata_result
 
 
 if __name__ == "__main__":
 
-    # 1. Parse Arguments
+    # Parse Arguments
     parser = argparse.ArgumentParser(description="Run AlternativeIdea alignment on a dataset folder")
     parser.add_argument('-d', '--dataset', dest='dataset', type=Path, help='Path to dataset folder')
     parser.add_argument('-c', '--config', dest='config', type=Path, help='Path to config.yaml')
-    parser.add_argument('-o', '--output_path', dest='output_path', type=Path, help='Path where to store result to')
+    parser.add_argument('-o', '--output_path', dest='output_path', type=Path, required=False, default=None, help='Path where to store result to')
     parser.add_argument('--logging', dest='logging', choices=['normal', 'verbose'], default='normal',
                         help="Logging verbosity. Use 'verbose' for more logs.")
     args = parser.parse_args()
 
-    # 2. Configure logging based on argument
+    # Configure logging based on argument
     level = logging.DEBUG if args.logging == "verbose" else logging.INFO
     logging.basicConfig(stream=sys.stdout, level=level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     logger.setLevel(level)
 
+    # Run alignment
     main(
         args.dataset,
         args.config,

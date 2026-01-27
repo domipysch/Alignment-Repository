@@ -4,6 +4,7 @@ from .spatial_graph import SpatialGraphType
 import anndata as ad
 import pandas as pd
 import logging
+from ...utils.io import csv_to_anndata
 logger = logging.getLogger(__name__)
 
 
@@ -16,10 +17,8 @@ def load_sc_adata(dataset_folder: Path) -> ad.AnnData:
         ad.AnnData: Single-cell AnnData object (C x G)
     """
     logger.debug("Load scRNA data")
-    # In file: Genes = Rows, Cells = Columns
-    df = pd.read_csv(dataset_folder / "scData_GEP.csv", index_col=0)
-    adata_sc = ad.AnnData(df.T)
-    return adata_sc
+    # In file: G x C, we want: C x G
+    return csv_to_anndata(dataset_folder / "scData_GEP.csv", transpose=True)
 
 
 def load_st_adata(dataset_folder: Path) -> ad.AnnData:
@@ -31,9 +30,8 @@ def load_st_adata(dataset_folder: Path) -> ad.AnnData:
         ad.AnnData: ST AnnData object (S x G)
     """
     logger.debug("Load ST data")
-    # In file: Genes = Rows, Spots = Columns
-    df = pd.read_csv(dataset_folder / "stData_GEP.csv", index_col=0)
-    adata_st = ad.AnnData(df.T)
+    # In file: G x S, we want: S x G
+    adata_st = csv_to_anndata(dataset_folder / "stData_GEP.csv", transpose=True)
     # Load spot coordinates
     logger.debug("Load ST coordinates")
     coords = pd.read_csv(dataset_folder / "stData_Spots.csv", index_col=0)

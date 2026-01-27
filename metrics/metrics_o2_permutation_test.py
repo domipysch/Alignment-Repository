@@ -2,11 +2,10 @@ from pathlib import Path
 import os
 import numpy as np
 import json
-import argparse
 import multiprocessing as mp
 import logging
-from .utils.dataset_query import get_z_real_and_predicted_data
-from .utils.utils import create_adata_object
+from anndata import AnnData
+from MPA_Code.metrics.utils.dataset_query import get_z_real_and_predicted_data_only_shared_genes
 logger = logging.getLogger(__name__)
 
 
@@ -201,20 +200,18 @@ def add_p_value_to_json(json_path):
     logging.info(f"Added p_value={p_value:.6f} to {json_path}")
 
 
-def main(dataset_folder: Path, results_file: Path, metrics_folder_name: Path):
+def main(dataset_folder: Path, result_gep: AnnData, metrics_folder_name: Path):
     logger.info("Run permutation test for objective o2")
 
     result_folder_permutation = metrics_folder_name / "o2" / "permutation_test"
     os.makedirs(result_folder_permutation, exist_ok=True)
 
-    # Load data
-    z_data, predicted_z_data = get_z_real_and_predicted_data(dataset_folder, results_file)
+    # Load data (S x shared G)
+    adata_z, adata_predicted_z = get_z_real_and_predicted_data_only_shared_genes(dataset_folder, result_gep)
 
     # Assert that both DataFrames have the same shape of genes and spots
-    assert z_data.shape == predicted_z_data.shape, "DataFrames haben unterschiedliche Formen."
-
-    # Create AnnData objects
-    adata_z, adata_predicted_z = create_adata_object(z_data), create_adata_object(predicted_z_data)
+    assert adata_z.shape == adata_predicted_z.shape, "DataFrames haben unterschiedliche Formen."
+    assert adata_z.n_obs == result_gep.n_vars
 
     permutation_test_per_gene(adata_z, adata_predicted_z, result_folder_permutation)
     # permutation_test_per_spot(adata_z, adata_predicted_z, result_folder_permutation)
@@ -222,16 +219,3 @@ def main(dataset_folder: Path, results_file: Path, metrics_folder_name: Path):
     add_p_value_to_json(result_folder_permutation / "permutation_test_per_gene.json")
     # add_p_value_to_json(result_folder_permutation / "permutation_test_per_spot.json")
 
-
-if __name__ == "__main__":
-    # Configure basic logging
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-    logger = logging.getLogger(__name__)
-
-    parser = argparse.ArgumentParser(description="Run permutation test on cos-sim metric for objective o2")
-    parser.add_argument('-d', '--dataset', type=Path, help='Path to dataset folder')
-    parser.add_argument('-r', '--result', type=Path, help='Path to result file')
-    parser.add_argument('-m', '--metrics', type=Path, help='Path to output metric folder')
-    args = parser.parse_args()
-
-    main(args.dataset, args.result, args.metrics)

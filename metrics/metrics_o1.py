@@ -4,11 +4,12 @@ from typing import Dict
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import argparse
 import json
 import logging
-from .utils.utils import compute_basic_metrics_for_gene_groups
-from .utils.dataset_query import get_shared_genes
+from anndata import AnnData
+from scipy import sparse
+from MPA_Code.metrics.utils.utils import compute_basic_metrics_for_gene_groups
+from MPA_Code.metrics.utils.dataset_query import get_shared_genes
 logger = logging.getLogger(__name__)
 
 
@@ -38,21 +39,18 @@ def compute_metrics_scRNA(dataset_folder: Path) -> Dict[str, float]:
     )
 
 
-def compute_metrics_o1(dataset_folder: Path, result_file: Path) -> Dict[str, float]:
+def compute_metrics_o1(dataset_folder: Path, result_gep: AnnData) -> Dict[str, float]:
     """
     Load predicted GEP file as pandas DataFrame & compute basic metrics.
+
+    result_gep: Predicted Z' (G x S)
+
     """
 
     if not dataset_folder.exists():
         raise FileNotFoundError(f"Datensatzordner nicht gefunden: {dataset_folder}")
 
-    # Check if result file exists
-    if not result_file.exists():
-        raise FileNotFoundError(f"Ergebnisdatei nicht gefunden: {result_file}")
-
-    # Z' DataFrame aus Ergebnisdatei einlesen
-    df = pd.read_csv(result_file, header=0, index_col=0)
-    genes = df.index
+    genes = result_gep.var_names
 
     # Split genes in marker and non-marker genes
     marker_genes = set(get_shared_genes(dataset_folder))
@@ -60,8 +58,14 @@ def compute_metrics_o1(dataset_folder: Path, result_file: Path) -> Dict[str, flo
     marker_genes_in_result = list(result_genes_set.intersection(marker_genes))
     non_marker_genes_in_result = list(result_genes_set.difference(marker_genes))
 
+    X = result_gep.X
+    if sparse.issparse(X):
+        X = X.toarray()
+    else:
+        X = np.asarray(X)
+
     return compute_basic_metrics_for_gene_groups(
-        df,
+        pd.DataFrame(X, index=result_gep.obs_names, columns=result_gep.var_names),
         marker_genes_in_result,
         non_marker_genes_in_result,
         include_norm_values=True,
@@ -248,7 +252,7 @@ def create_log_norms_boxplots(metrics_result: Dict, out_path: Path = None, show:
     plt.close(fig)
 
 
-def main(dataset_folder: Path, results_path: Path, metrics_output_path: Path):
+def main(dataset_folder: Path, result_gep: AnnData, metrics_output_path: Path):
     """
     Compute metrics for objective 1 and save results as JSON files / Diagrams.
 
@@ -257,7 +261,7 @@ def main(dataset_folder: Path, results_path: Path, metrics_output_path: Path):
 
     Args:
         dataset_folder:
-        results_path:
+        result_gep: Predicted Z' (G x S)
         metrics_output_path:
 
     Returns:
@@ -287,7 +291,7 @@ def main(dataset_folder: Path, results_path: Path, metrics_output_path: Path):
         )
 
     # Compute metrics for o1
-    res = compute_metrics_o1(dataset_folder, results_path)
+    res = compute_metrics_o1(dataset_folder, result_gep)
 
     # Save result
     scrna_dir = metrics_output_path / "scRNA"
@@ -364,18 +368,4 @@ def main(dataset_folder: Path, results_path: Path, metrics_output_path: Path):
         out_path=metrics_dir / "log_norms_boxplot.png",
         show=False
     )
-
-
-if __name__ == "__main__":
-    # Configure basic logging
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-    logger = logging.getLogger(__name__)
-
-    parser = argparse.ArgumentParser(description="Run metrics for objective 1 on a predicted GEP file")
-    parser.add_argument('-d', '--dataset', type=Path, help='Path to dataset folder')
-    parser.add_argument('-r', '--result', type=Path, help='Path to result file')
-    parser.add_argument('-m', '--metrics', type=Path, help='Path to output metric folder')
-    args = parser.parse_args()
-
-    main(args.dataset, args.results, args.metrics)
 

@@ -5,12 +5,9 @@ import networkx as nx
 import numpy as np
 from anndata import AnnData
 import argparse
-from .utils.dataset_query import get_z_real_and_predicted_data
-from .utils.utils import create_adata_object
-from .utils.distance_metrics import (
-    cosine_similarity,
-)
-from .metrics_o4 import create_spatial_graph, NeighborhoodType
+from MPA_Code.metrics.utils.dataset_query import get_z_real_and_predicted_data_only_shared_genes
+from MPA_Code.metrics.utils.distance_metrics import cosine_similarity
+from MPA_Code.metrics.metrics_o4 import create_spatial_graph, NeighborhoodType
 import json
 import sys
 import logging
@@ -105,17 +102,17 @@ def add_p_value_to_json(json_path):
     print(f"Added p_value={p_value:.6f} to {json_path}")
 
 
-def main(dataset_folder: Path, result_file: Path, metrics_folder_name: Path):
+def main(dataset_folder: Path, result_gep: AnnData, metrics_folder_name: Path):
     logger.info("Run permutation test for objective o4")
 
     output_folder = metrics_folder_name / "o4" / "knn"
     os.makedirs(output_folder, exist_ok=True)
 
-    z_data, predicted_z_data = get_z_real_and_predicted_data(dataset_folder, result_file)
+    # S x shared_genes
+    adata_z, adata_predicted_z = get_z_real_and_predicted_data_only_shared_genes(dataset_folder, result_gep)
     # Assert that both DataFrames have the same shape of genes and spots
-    assert z_data.shape == predicted_z_data.shape, "DataFrames haben unterschiedliche Formen."
-    # Create AnnData objects
-    adata_z, adata_predicted_z = create_adata_object(z_data), create_adata_object(predicted_z_data)
+    assert adata_z.shape == adata_predicted_z.shape, "DataFrames haben unterschiedliche Formen."
+    assert adata_z.n_obs == result_gep.n_vars
 
     # KNN
     graph = create_spatial_graph(dataset_folder, neighborhood_type=NeighborhoodType.KNN, k=4)

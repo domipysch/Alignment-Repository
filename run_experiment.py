@@ -36,12 +36,18 @@ def create_shared_boxplots(ids: list[int], metrics_folder: Path, output_folder: 
         )
 
 
-def run_config(dataset: Path, run_config_path: Path, save_result_path: Optional[Path], metrics_folder: Path, run_permutation_tests: bool = False):
+def run_config(dataset: Path, run_config_path: Path, save_result_path: Optional[Path], save_mapping_path: Optional[Path], metrics_folder: Path, run_permutation_tests: bool = False):
     # Determine verbose flag from current logger level
     verbose_flag = logger.getEffectiveLevel() == logging.DEBUG
 
     # Run alignment (G x S)
-    predicted_gep = alternative_idea.main(dataset, run_config_path, output_path=save_result_path, verbose_logging=verbose_flag)
+    predicted_gep = alternative_idea.main(
+        dataset,
+        run_config_path,
+        output_path=save_result_path,
+        mapping_output_path=save_mapping_path,
+        verbose_logging=verbose_flag
+    )
 
     # Run individual metrics
     run_all_metrics.main(
@@ -67,17 +73,44 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
 
     # Helper: collect leaf paths -> list of values (lists become value lists, scalars become singleton list)
     def collect_leaves(node, path=()):
+        """
+        Traverses `node` (which may be nested dicts/lists/scalars) and returns a list of
+        (path_tuple, values_list) pairs.
+
+        New behavior: if at some path the node is a list AND every element of that list is a dict,
+        we treat the whole list as a set of alternative full-config dictionaries for that path.
+        This allows specifying e.g. multiple complete `loss_weights` dicts as alternative configs.
+
+        Examples handled:
+        - scalar -> becomes [scalar]
+        - list of scalars -> becomes that list
+        - list of dicts -> treated as a leaf; values_list equals the list of dicts
+        - dict -> recurse into keys
+        """
         leaves = []
+        # If it's a list at this path
+        if isinstance(node, list):
+            # empty list -> keep as-is (will be validated later)
+            if len(node) == 0:
+                leaves.append((path, []))
+                return leaves
+            # if all items are dicts, treat the whole list as an atomic set of dict-options
+            if all(isinstance(item, dict) for item in node):
+                leaves.append((path, node))
+                return leaves
+            # otherwise treat it as a normal list of scalar options
+            leaves.append((path, node))
+            return leaves
+
+        # If it's a dict, recurse into keys
         if isinstance(node, dict):
             for k, v in node.items():
                 leaves.extend(collect_leaves(v, path + (k,)))
-        else:
-            # Leaf node (could be list or scalar)
-            if isinstance(node, list):
-                vals = node
-            else:
-                vals = [node]
-            leaves.append((path, vals))
+            return leaves
+
+        # Otherwise scalar leaf
+        vals = [node]
+        leaves.append((path, vals))
         return leaves
 
     leaves = collect_leaves(base_cfg)
@@ -147,7 +180,14 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
             start = time.time()
             try:
                 logger.info(f"Starting run {run_id}/{total_runs - 1} -> writing to {run_dir}")
-                run_config(dataset, run_config_path, (run_dir / "gep.csv") if save_result else None, metric_dir, run_permutation_tests=run_permutation_tests)
+                run_config(
+                    dataset,
+                    run_config_path,
+                    (run_dir / "gep.csv") if save_result else None,
+                    (run_dir / "mapping.csv") if save_result else None,
+                    metric_dir,
+                    run_permutation_tests=run_permutation_tests
+                )
                 duration = time.time() - start
                 writer.writerow([run_id, str(run_config_path), str(result_path), "ok", f"{duration:.3f}", ""])
                 logger.info(f"Run {run_id} completed in {duration:.2f}s")

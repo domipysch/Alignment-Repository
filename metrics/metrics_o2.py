@@ -91,10 +91,11 @@ def compute_metrics_per_gene(adata_z, adata_predicted_z, save_cossim_json: Path 
         save_cossim_json.parent.mkdir(parents=True, exist_ok=True)
         # JSON-serializable (floats already)
         with save_cossim_json.open('w', encoding='utf-8') as f:
+            print(save_cossim_json)
             json.dump(cossim_dict, f, indent=4)
 
 
-def compute_metrics_per_spot(adata_z, adata_predicted_z) -> None:
+def compute_metrics_per_spot(adata_z, adata_predicted_z, save_cossim_json: Path = None) -> None:
     """
     Compute cosine similarity (or other distance metrics) per spot and write results directly into
     adata_predicted_z.obs['cossim'].
@@ -116,6 +117,9 @@ def compute_metrics_per_spot(adata_z, adata_predicted_z) -> None:
     # adata_predicted_z.obs['bhat'] = np.nan
     # adata_predicted_z.obs['tv'] = np.nan
 
+    # Collect cossim values for optional export
+    cossim_dict = {}
+
     counter = 0
     for spot in adata_predicted_z.obs_names:
         # Retrieve vectors (AnnData slicing may return 2D arrays)
@@ -123,7 +127,8 @@ def compute_metrics_per_spot(adata_z, adata_predicted_z) -> None:
         vec_pred = adata_predicted_z[spot, :].X.toarray().ravel()
 
         # Store metrics directly in adata_predicted_z.obs
-        adata_predicted_z.obs.at[spot, 'cossim'] = cosine_similarity(vec_z, vec_pred)
+        val_cossim = cosine_similarity(vec_z, vec_pred)
+        adata_predicted_z.obs.at[spot, 'cossim'] = val_cossim
         # adata_predicted_z.obs.at[spot, 'sqrt_cossim'] = sqrt_cosine_similarity(vec_z, vec_pred)
         # adata_predicted_z.obs.at[spot, 'eucl'] = euclidean_l2(vec_z, vec_pred)
         # adata_predicted_z.obs.at[spot, 'rmse'] = rmse(vec_z, vec_pred)
@@ -137,10 +142,18 @@ def compute_metrics_per_spot(adata_z, adata_predicted_z) -> None:
         # adata_predicted_z.obs.at[spot, 'hellinger'] = hellinger_distance(vec_z, vec_pred)
         # adata_predicted_z.obs.at[spot, 'bhat'] = bhattacharyya_distance(vec_z, vec_pred)
         # adata_predicted_z.obs.at[spot, 'tv'] = total_variation(vec_z, vec_pred)
+        cossim_dict[spot] = val_cossim
 
         counter += 1
         if counter % 1000 == 0:
             logging.info(f"Processed {counter}/{adata_predicted_z.n_obs} spots.")
+
+    # Optional: save cossim per gene as JSON
+    if save_cossim_json is not None:
+        save_cossim_json.parent.mkdir(parents=True, exist_ok=True)
+        # JSON-serializable (floats already)
+        with save_cossim_json.open('w', encoding='utf-8') as f:
+            json.dump(cossim_dict, f, indent=4)
 
 
 def generate_box_plot_metrics_per_gene(adata_predicted_z, output_folder: Path = None) -> None:
@@ -591,6 +604,7 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_output_folder: Path)
     metrics_folder_boxplots_per_gene = metrics_output_folder / "o2" / "boxplots_per_gene"
     metrics_cossim_per_gene_json = metrics_output_folder / "o2" / "boxplots_per_gene" / "cossim.json"
     metrics_folder_boxplots_per_spot = metrics_output_folder / "o2" / "boxplots_per_spot"
+    metrics_cossim_per_spot_json = metrics_output_folder / "o2" / "boxplots_per_spot" / "cossim.json"
     metrics_folder_spatial_per_gene = metrics_output_folder / "o2" / "spatial_per_gene"
     os.makedirs(metrics_folder_boxplots_per_gene, exist_ok=True)
     os.makedirs(metrics_folder_boxplots_per_spot, exist_ok=True)
@@ -624,7 +638,7 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_output_folder: Path)
     )
 
     # Compute and store cossim per spot in adata_predicted_z.var
-    compute_metrics_per_spot(adata_z, adata_predicted_z)
+    compute_metrics_per_spot(adata_z, adata_predicted_z, save_cossim_json=metrics_cossim_per_spot_json)
 
     # Generate boxplot per spot
     generate_box_plot_metrics_per_spot(

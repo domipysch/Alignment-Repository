@@ -2,7 +2,7 @@ import argparse
 import sys
 import os
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional
 import yaml
 import scanpy as sc
 import torch
@@ -100,7 +100,7 @@ def alternative_idea_compute_mapping(
     adata_st: AnnData,
     verbose_logging: bool,
     use_device: str = None,
-) -> tuple[torch.Tensor, List[float]]:
+) -> tuple[torch.Tensor, dict]:
 
     # 1. Load Config
     logger.debug(f"Load config: {path_to_config}")
@@ -186,7 +186,28 @@ def alternative_idea_compute_mapping(
     logger.info("Starting optimization loop")
     model.train()
 
-    losses: List[float] = []
+    # Collect per-epoch losses for plotting: individual components + total
+    losses = {
+        "total": [],
+        "rec_spot": [],
+        "rec_state": [],
+        "clust": [],
+        "state_entropy": [],
+        "spot_entropy": []
+    }
+
+    def to_scalar(t):
+        try:
+            if torch.is_tensor(t):
+                return float(t.detach().cpu().item())
+            else:
+                return float(t)
+        except Exception:
+            return float(t)
+
+    # Initialize A so we can safely return it even when epochs == 0
+    A = None
+
     for epoch in range(int(training_config["epochs"])):
         optimizer.zero_grad()
 
@@ -211,8 +232,13 @@ def alternative_idea_compute_mapping(
         total_loss.backward()
         optimizer.step()
 
-        # Collect loss value
-        losses.append(float(total_loss.item()))
+        # Collect loss values
+        losses["total"].append(to_scalar(total_loss))
+        losses["rec_spot"].append(to_scalar(loss_dict.get("rec_spot")))
+        losses["rec_state"].append(to_scalar(loss_dict.get("rec_state")))
+        losses["clust"].append(to_scalar(loss_dict.get("clust")))
+        losses["state_entropy"].append(to_scalar(loss_dict.get("state_entropy")))
+        losses["spot_entropy"].append(to_scalar(loss_dict.get("spot_entropy")))
 
         # Logging: verbose -> log every epoch at DEBUG, normal -> log every 10 epochs at INFO
         if verbose_logging:
@@ -220,6 +246,14 @@ def alternative_idea_compute_mapping(
         else:
             if epoch % 10 == 0:
                 logger.info(f"Epoch {epoch:03d} | Total Loss: {total_loss.item():.4f}")
+
+    # If no forward pass happened (e.g. epochs == 0), run one inference forward to produce A
+    if A is None:
+        logger.debug("No training epochs executed; running one forward pass to obtain mapping A.")
+        model.eval()
+        with torch.no_grad():
+            A, B, h, M_rec, F = model(Z, edge_index)
+        model.train()
 
     logger.info("Alignment complete.")
     return A, losses
@@ -229,6 +263,7 @@ def main(
     dataset_folder: Path,
     config_path: Path,
     output_path: Optional[Path],
+    mapping_output_path: Optional[Path] = None,
     verbose_logging: bool = False
 ) -> AnnData:
 
@@ -255,11 +290,19 @@ def main(
     # Create and save loss curve figure
     loss_fig_path = config_path.parent / "loss–curve.png"
     plt.figure()
-    plt.plot(range(len(losses)), losses, marker='o', linewidth=1)
+    # Plot individual components + total
+    epochs = list(range(len(losses["total"])))
+    plt.plot(epochs, losses["total"], label="total", linewidth=2, color="black")
+    plt.plot(epochs, losses["rec_spot"], label="rec_spot")
+    plt.plot(epochs, losses["rec_state"], label="rec_state")
+    plt.plot(epochs, losses["clust"], label="clust")
+    plt.plot(epochs, losses["state_entropy"], label="state_entropy")
+    plt.plot(epochs, losses["spot_entropy"], label="spot_entropy")
     plt.xlabel("Epoch")
-    plt.ylabel("Total Loss")
-    plt.title("Loss Curve")
+    plt.ylabel("Loss")
+    plt.title("Loss Curve (components + total)")
     plt.grid(True)
+    plt.legend()
     plt.tight_layout()
     plt.savefig(str(loss_fig_path))
     plt.close()
@@ -272,6 +315,21 @@ def main(
         argmax_idx = torch.argmax(spot_to_cell_map, dim=1, keepdim=True)  # for each spot (column), index of max cell / cell type
         spot_to_cell_map = torch.zeros_like(spot_to_cell_map)
         spot_to_cell_map.scatter_(1, argmax_idx, 1.0)
+
+    # Optional: Save mapping to CSV
+    if mapping_output_path is not None:
+        logger.info(f"Write spot-to-cell mapping to CSV: {mapping_output_path}")
+        mapping_adata = AnnData(X=spot_to_cell_map.detach().cpu().numpy())
+        mapping_adata.obs_names = adata_st.obs_names
+        mapping_adata.var_names = adata_sc.obs_names
+        anndata_to_csv(
+            mapping_adata,
+            mapping_output_path,
+            top_left_label="Mapping",
+            format_func=fmt_nonzero_4,
+            uppercase_var_names=True,
+        )
+        logger.info(f"Saved spot-to-cell mapping to {mapping_output_path}")
 
     # Step 4: Compute Z' out of the mapping (expected gene expression per spot, scRNA data weighted by mapping)
     adata_sc_tensor = torch.as_tensor(adata_sc.X, dtype=torch.float32, device=TORCH_DEVICE)
@@ -313,6 +371,7 @@ if __name__ == "__main__":
     parser.add_argument('-d', '--dataset', dest='dataset', type=Path, help='Path to dataset folder')
     parser.add_argument('-c', '--config', dest='config', type=Path, help='Path to config.yaml')
     parser.add_argument('-o', '--output_path', dest='output_path', type=Path, required=False, default=None, help='Path where to store result to')
+    parser.add_argument('-mo', '--mapping_output_path', type=Path, required=False, default=None, help='Path where to store mapping CSV to')
     parser.add_argument('--logging', dest='logging', choices=['normal', 'verbose'], default='normal',
                         help="Logging verbosity. Use 'verbose' for more logs.")
     args = parser.parse_args()
@@ -327,6 +386,6 @@ if __name__ == "__main__":
         args.dataset,
         args.config,
         args.output_path,
+        args.mapping_output_path,
         verbose_logging=(args.logging == "verbose"),
     )
-

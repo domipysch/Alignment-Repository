@@ -50,7 +50,5 @@ if __name__ == "__main__":
     logger.info("Result file path: %s", args.result)
     logger.info("Metrics output folder: %s", args.metrics)
 
-    # Load result GEP
     result_gep = csv_to_anndata(args.result, transpose=False)
-
     main(args.dataset, args.metrics, result_gep, run_permutation_tests=False)

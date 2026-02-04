@@ -91,7 +91,6 @@ def compute_metrics_per_gene(adata_z, adata_predicted_z, save_cossim_json: Path 
         save_cossim_json.parent.mkdir(parents=True, exist_ok=True)
         # JSON-serializable (floats already)
         with save_cossim_json.open('w', encoding='utf-8') as f:
-            print(save_cossim_json)
             json.dump(cossim_dict, f, indent=4)
 
 

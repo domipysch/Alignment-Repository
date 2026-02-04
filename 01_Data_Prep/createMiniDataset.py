@@ -45,7 +45,7 @@ def load_st_adata(dataset_folder: str) -> ad.AnnData:
 if __name__ == "__main__":
 
     dataset_from = "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_Datasets/03_MouseSSP"
-    dataset_to = "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_Datasets/03_MouseSSP_Mini_2"
+    dataset_to = "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_Datasets/03_MouseSSP_Mini"
     target_nr_sc_cells = 15
     target_nr_sc_genes = 30
     target_nr_st_spots = 10
@@ -146,4 +146,3 @@ if __name__ == "__main__":
     )
     stData_mini_df.index.name = "GEP"
     stData_mini_df.to_csv(os.path.join(dataset_to, "stData_GEP.csv"))
-

@@ -86,6 +86,12 @@ def load_config(config_path: Path) -> tuple[dict, dict, dict, dict, dict]:
         for key in ("lr", "epochs", "dropout_decoder"):
             if key not in training_cfg:
                 raise ValueError(f"`training.{key}` is required in the config.")
+        # Optional normalize_and_log flag: default True (preserve previous behavior)
+        if "normalize_and_log" in training_cfg:
+            if not isinstance(training_cfg["normalize_and_log"], bool):
+                raise ValueError("`training.normalize_and_log` must be a boolean if provided.")
+        else:
+            training_cfg["normalize_and_log"] = True
 
         # Validate loss_weights is a mapping (specific keys may be optional)
         if not isinstance(loss_weights_cfg, dict):
@@ -124,12 +130,15 @@ def alternative_idea_compute_mapping(
         device = torch.device(use_device)
     logger.info(f"Using device: {device}")
 
-    # 3. Preprocess data (only for mapping): Normalize & Log-transform
-    logger.info("Normalize & Log-transform gene expression and spatial data")
-    sc.pp.normalize_total(adata_sc)
-    sc.pp.normalize_total(adata_st)
-    sc.pp.log1p(adata_sc)
-    sc.pp.log1p(adata_st)
+    # (Optional) 3. Preprocess data (only for mapping): Normalize & Log-transform
+    if training_config.get("normalize_and_log", True):
+        logger.info("Normalize & Log-transform gene expression and spatial data")
+        sc.pp.normalize_total(adata_sc)
+        sc.pp.normalize_total(adata_st)
+        sc.pp.log1p(adata_sc)
+        sc.pp.log1p(adata_st)
+    else:
+        logger.info("Skipping normalize_and_log as per config (training.normalize_and_log=false)")
 
     # 4. Convert input anndata to tensors
     logger.debug("Prepare input tensors for model...")
@@ -178,6 +187,8 @@ def alternative_idea_compute_mapping(
         lambda_clust=loss_weights["lambda_clust"],
         lambda_state_entropy=loss_weights["lambda_state_entropy"],
         lambda_spot_entropy=loss_weights["lambda_spot_entropy"],
+        normalize_by_initial=True,
+        warmup_iters=1,
     )
 
     optimizer = optim.Adam(model.parameters(), lr=training_config["lr"])
@@ -228,6 +239,23 @@ def alternative_idea_compute_mapping(
 
         total_loss = loss_dict["loss"]
 
+        # 3. Optionaler Gradient-Check (Nur zur Diagnose)
+        if epoch % 100 == 0:
+            logger.debug(f"\n--- Gradient Analysis (Epoch {epoch}) ---")
+            for name, loss_val in loss_dict.items():
+                if name == "loss": continue
+
+                # Temporäre Gradientenberechnung für diesen spezifischen Term
+                model.zero_grad()
+                loss_val.backward(retain_graph=True)
+
+                # Berechne die Norm über alle trainierbaren Gewichte
+                grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1000)
+                logger.debug(f"Term: {name:15} | Loss: {loss_val.item():.4f} | Grad-Norm: {grad_norm:.4f}")
+
+            # Reset für den eigentlichen Backprop
+            model.zero_grad()
+
         # Backward pass
         total_loss.backward()
         optimizer.step()
@@ -267,7 +295,7 @@ def main(
     verbose_logging: bool = False
 ) -> AnnData:
 
-    TORCH_DEVICE = "mps"
+    TORCH_DEVICE = "cpu"
 
     # Step 1: Load data
     logger.info("Load input scRNA and ST data...")
@@ -287,29 +315,12 @@ def main(
     logger.info("Obtained spot-to-cell mapping AnnData.")
     assert spot_to_cell_map.shape == (adata_st.n_obs, adata_sc.n_obs), "dims passen nicht"
 
-    # Create and save loss curve figure
-    loss_fig_path = config_path.parent / "loss–curve.png"
-    plt.figure()
-    # Plot individual components + total
-    epochs = list(range(len(losses["total"])))
-    plt.plot(epochs, losses["total"], label="total", linewidth=2, color="black")
-    plt.plot(epochs, losses["rec_spot"], label="rec_spot")
-    plt.plot(epochs, losses["rec_state"], label="rec_state")
-    plt.plot(epochs, losses["clust"], label="clust")
-    plt.plot(epochs, losses["state_entropy"], label="state_entropy")
-    plt.plot(epochs, losses["spot_entropy"], label="spot_entropy")
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.title("Loss Curve (components + total)")
-    plt.grid(True)
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(str(loss_fig_path))
-    plt.close()
-    logger.info(f"Saved loss curve to {loss_fig_path}")
+    mapping_config, _, _, _, _ = load_config(config_path)
+
+    # Step 2.1 Create plots for loss curves
+    create_loss_plots(losses, config_path.parent / "loss")
 
     # Step 3 (optional): Apply one-hot encoding to mapping
-    mapping_config, _, _, _, _ = load_config(config_path)
     logger.info("Apply deterministic mapping" if mapping_config["deterministic"] else "Keep probabilistic mapping")
     if mapping_config["deterministic"]:
         argmax_idx = torch.argmax(spot_to_cell_map, dim=1, keepdim=True)  # for each spot (column), index of max cell / cell type
@@ -333,7 +344,7 @@ def main(
 
     # Step 4: Compute Z' out of the mapping (expected gene expression per spot, scRNA data weighted by mapping)
     adata_sc_tensor = torch.as_tensor(adata_sc.X, dtype=torch.float32, device=TORCH_DEVICE)
-    predicted_spot_expressions = spot_to_cell_map @ adata_sc_tensor  # S x G
+    predicted_spot_expressions = torch.matmul(spot_to_cell_map, adata_sc_tensor)  # S x G
 
     # Transpose to G x S
     predicted_spot_expressions = predicted_spot_expressions.T  # now G x S
@@ -362,6 +373,58 @@ def main(
 
     # Step 6: Return result
     return adata_result
+
+
+def create_loss_plots(losses, loss_dir):
+
+    loss_dir.mkdir(parents=True, exist_ok=True)
+
+    loss_fig_path = loss_dir / "loss–curve.png"
+    plt.figure()
+    # Plot individual components + total
+    epochs = list(range(len(losses["total"])))
+    plt.plot(epochs, losses["total"], label="total", linewidth=2, color="black")
+    plt.plot(epochs, losses["rec_spot"], label="rec_spot")
+    plt.plot(epochs, losses["rec_state"], label="rec_state")
+    plt.plot(epochs, losses["clust"], label="clust")
+    plt.plot(epochs, losses["state_entropy"], label="state_entropy")
+    plt.plot(epochs, losses["spot_entropy"], label="spot_entropy")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.title("Loss Curve (components + total)")
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(str(loss_fig_path))
+    plt.close()
+    logger.info(f"Saved loss curve to {loss_fig_path}")
+
+    num_epochs = len(losses.get("total", []))
+
+    # Components (order for plotting)
+    components = ("total", "rec_spot", "rec_state", "clust", "state_entropy", "spot_entropy")
+
+    # Ensure epochs list is available
+    epochs = list(range(num_epochs))
+
+    # Save one plot per loss component
+    for comp in components:
+        plt.figure()
+        if comp == "total":
+            y = losses.get("total", [])
+        else:
+            y = losses.get(comp, [])
+        plt.plot(epochs, y, label=comp, linewidth=2 if comp == "total" else 1)
+        plt.xlabel("Epoch")
+        plt.ylabel("Loss")
+        plt.title(f"Loss: {comp}")
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+        out_path = loss_dir / f"{comp}.png"
+        plt.savefig(str(out_path))
+        plt.close()
+        logger.info(f"Saved per-loss plot to {out_path}")
 
 
 if __name__ == "__main__":

@@ -13,7 +13,9 @@ class AlternativeIdeaLoss(nn.Module):
         lambda_clust: float = 1.0,
         lambda_state_entropy: float = 1.0,
         lambda_spot_entropy: float = 1.0,
-        eps: float = 1e-8
+        eps: float = 1e-8,
+        normalize_by_initial: bool = True,
+        warmup_iters: int = 1,
     ):
         super(AlternativeIdeaLoss, self).__init__()
         self.lambda_rec_spot = lambda_rec_spot
@@ -22,6 +24,20 @@ class AlternativeIdeaLoss(nn.Module):
         self.lambda_state_entropy = lambda_state_entropy
         self.lambda_spot_entropy = lambda_spot_entropy
         self.eps = eps
+        # Normalization / baseline settings for rec_state and clust
+        self.normalize_by_initial = bool(normalize_by_initial)
+        self.warmup_iters = int(warmup_iters) if warmup_iters >= 1 else 1
+
+        # Buffers to hold baseline statistics (registered buffers move with module)
+        # Initialize with NaN to indicate not-yet-set
+        self.register_buffer("_init_rec_state", torch.tensor(float("nan")))
+        self.register_buffer("_init_clust", torch.tensor(float("nan")))
+
+        # vielleicht ist das mit dem mean overengineered und wir brauchen einfach nur ersten wert. todo. check.
+        # Accumulators used during warmup to compute the baseline averages
+        self._acc_rec_state = 0.0
+        self._acc_clust = 0.0
+        self._forward_count = 0
         logger.debug("AlternativeIdeaLoss initialized")
 
     def get_rec_spot_loss(self, A: Tensor, X_shared: Tensor, Z_shared: Tensor) -> Tensor:
@@ -45,6 +61,11 @@ class AlternativeIdeaLoss(nn.Module):
         # (S x C) @ (C x G_shared) -> (S x G_shared)
         Z_prime = torch.matmul(A, X_shared)
 
+        # print("Z_shared")
+        # print(Z_shared)
+        # print("Z_prime")
+        # print(Z_prime)
+
         # 2. Compute Cosine Similarity Components
         # Dot product across the gene dimension for each spot
         dot_product = torch.sum(Z_shared * Z_prime, dim=1)  # (S,)
@@ -61,8 +82,9 @@ class AlternativeIdeaLoss(nn.Module):
         cosine_sim = torch.clamp(cosine_sim, -1.0, 1.0)
 
         # Distance = sqrt(1 - similarity)
-        # Or without sqrt?
-        loss_per_spot = torch.sqrt(1.0 - cosine_sim)  # (S,)
+        # loss_per_spot = torch.sqrt(1.0 - cosine_sim)  # (S,)
+        # todo. Or doch without sqrt?, gab nan-probleme mit
+        loss_per_spot = torch.clamp(1.0 - cosine_sim, min=0.0)
 
         return torch.mean(loss_per_spot)
 
@@ -96,7 +118,9 @@ class AlternativeIdeaLoss(nn.Module):
 
         # 5. Apply weights q_k and sum
         # This gives the total state reconstruction loss
-        weighted_loss = torch.sum(q * state_errors)
+        # weighted_loss = torch.sum(q * state_errors)
+        # todo. check. war sum!
+        weighted_loss = torch.mean(q * state_errors)
 
         return weighted_loss
 
@@ -196,21 +220,59 @@ class AlternativeIdeaLoss(nn.Module):
         l_state_entropy = self.get_state_entropy_loss(B)
         l_spot_entropy = self.get_spot_entropy_loss(A, B)
 
-        # 2. Weighted total
+        # 2. Optionally normalize rec_state and clust by their initial baseline
+        # We use a warmup period: collect raw values for `warmup_iters` forwards
+        l_rec_state_norm = l_rec_state
+        l_clust_norm = l_clust
+
+        if self.normalize_by_initial:
+            # Accumulate raw scalar values during warmup
+            try:
+                raw_rs = float(l_rec_state.detach().cpu().item())
+                raw_cl = float(l_clust.detach().cpu().item())
+            except Exception:
+                # defensive fallback
+                raw_rs = float(l_rec_state.detach().cpu().numpy())
+                raw_cl = float(l_clust.detach().cpu().numpy())
+
+            if self._forward_count < self.warmup_iters:
+                self._acc_rec_state += raw_rs
+                self._acc_clust += raw_cl
+
+            self._forward_count += 1
+
+            # If warmup just finished, set initial baselines as the average across warmup
+            if self._forward_count == self.warmup_iters:
+                init_rs = max(self._acc_rec_state / float(self.warmup_iters), float(self.eps))
+                init_cl = max(self._acc_clust / float(self.warmup_iters), float(self.eps))
+                # store as tensors on the module (register_buffer created them)
+                self._init_rec_state = torch.tensor(init_rs, device=l_rec_state.device)
+                self._init_clust = torch.tensor(init_cl, device=l_clust.device)
+                logger.info(f"Loss baselines set: init_rec_state={init_rs:.6g}, init_clust={init_cl:.6g}")
+
+            # If baselines are available (not NaN), divide by baseline
+            if not torch.isnan(self._init_rec_state):
+                denom_rs = (self._init_rec_state + self.eps).to(l_rec_state.device)
+                l_rec_state_norm = l_rec_state / denom_rs
+            if not torch.isnan(self._init_clust):
+                denom_cl = (self._init_clust + self.eps).to(l_clust.device)
+                l_clust_norm = l_clust / denom_cl
+
+        # 3. Weighted total (use normalized versions for rec_state and clust when available)
         total_loss = (
             self.lambda_rec_spot * l_rec_spot +
-            self.lambda_rec_state * l_rec_state +
-            self.lambda_clust * l_clust +
+            self.lambda_rec_state * l_rec_state_norm +
+            self.lambda_clust * l_clust_norm +
             self.lambda_state_entropy * l_state_entropy +
             self.lambda_spot_entropy * l_spot_entropy
         )
 
+        # Return both the weighted normalized components (for training/plotting) and the raw-weighted ones (for debug)
         return {
             "loss": total_loss,
-            "rec_spot": l_rec_spot,
-            "rec_state": l_rec_state,
-            "clust": l_clust,
-            "state_entropy": l_state_entropy,
-            "spot_entropy": l_spot_entropy
+            "rec_spot": self.lambda_rec_spot * l_rec_spot,
+            "rec_state": self.lambda_rec_state * l_rec_state_norm,
+            "clust": self.lambda_clust * l_clust_norm,
+            "state_entropy": self.lambda_state_entropy * l_state_entropy,
+            "spot_entropy": self.lambda_spot_entropy * l_spot_entropy,
         }
-

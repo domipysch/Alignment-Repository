@@ -36,12 +36,12 @@ def create_shared_boxplots(ids: list[int], metrics_folder: Path, output_folder: 
         )
 
 
-def run_config(dataset: Path, run_config_path: Path, save_result_path: Optional[Path], save_mapping_path: Optional[Path], metrics_folder: Path, run_permutation_tests: bool = False):
+def run_config(dataset: Path, run_config_path: Path, save_result_path: Optional[Path], save_mapping_path: Optional[Path], metrics_folder: Path, run_permutation_tests: bool = False) -> dict:
     # Determine verbose flag from current logger level
     verbose_flag = logger.getEffectiveLevel() == logging.DEBUG
 
     # Run alignment (G x S)
-    predicted_gep = alternative_idea.main(
+    predicted_gep, losses_after_last_epoch = alternative_idea.main(
         dataset,
         run_config_path,
         output_path=save_result_path,
@@ -56,6 +56,8 @@ def run_config(dataset: Path, run_config_path: Path, save_result_path: Optional[
         result_gep=predicted_gep,
         run_permutation_tests=run_permutation_tests
     )
+
+    return losses_after_last_epoch
 
 
 def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_folder: Path, save_result: bool = False, run_permutation_tests: bool = False):
@@ -158,7 +160,7 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
 
         writer = csv.writer(summary_file)
         if write_header:
-            writer.writerow(["id", "config_path", "output_path", "status", "duration_seconds", "error_message"])
+            writer.writerow(["id", "config_path", "output_path", "status", "duration_seconds", "error_message", "L1", "L2", "L3", "L4", "L5"])
 
         for combo in combo_iter:
             # Build run-specific config
@@ -180,7 +182,7 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
             start = time.time()
             try:
                 logger.info(f"Starting run {run_id}/{total_runs - 1} -> writing to {run_dir}")
-                run_config(
+                losses_after_last_epoch = run_config(
                     dataset,
                     run_config_path,
                     (run_dir / "gep.csv") if save_result else None,
@@ -189,14 +191,21 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
                     run_permutation_tests=run_permutation_tests
                 )
                 duration = time.time() - start
-                writer.writerow([run_id, str(run_config_path), str(result_path), "ok", f"{duration:.3f}", ""])
+                writer.writerow([
+                    run_id, str(run_config_path), str(result_path), "ok", f"{duration:.3f}", "",
+                    losses_after_last_epoch["rec_spot"],
+                    losses_after_last_epoch["rec_state"],
+                    losses_after_last_epoch["clust"],
+                    losses_after_last_epoch["state_entropy"],
+                    losses_after_last_epoch["spot_entropy"],
+                ])
                 logger.info(f"Run {run_id} completed in {duration:.2f}s")
 
             except Exception as e:
                 duration = time.time() - start
                 tb = traceback.format_exc()
                 logger.error(f"Run {run_id} failed after {duration:.2f}s: {e}\n{tb}")
-                writer.writerow([run_id, str(run_config_path), str(result_path), "error", f"{duration:.3f}", str(e)])
+                writer.writerow([run_id, str(run_config_path), str(result_path), "error", f"{duration:.3f}", str(e), "", "", "", "", ""])
                 # Stop on first error as requested
                 raise
 

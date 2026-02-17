@@ -3,6 +3,8 @@ import sys
 import os
 from pathlib import Path
 from typing import Optional
+
+import pandas as pd
 import yaml
 import scanpy as sc
 import torch
@@ -83,7 +85,7 @@ def load_config(config_path: Path) -> tuple[dict, dict, dict, dict, dict]:
         # Validate training config
         if not training_cfg:
             raise ValueError("`training` must be a mapping in the config.")
-        for key in ("lr", "epochs", "dropout_decoder"):
+        for key in ("lr", "epochs", "dropout_decoder", "use_cm"):
             if key not in training_cfg:
                 raise ValueError(f"`training.{key}` is required in the config.")
         # Optional normalize_and_log flag: default True (preserve previous behavior)
@@ -106,7 +108,8 @@ def alternative_idea_compute_mapping(
     adata_st: AnnData,
     verbose_logging: bool,
     use_device: str = None,
-) -> tuple[torch.Tensor, dict]:
+    save_intermediate: bool = False,
+) -> tuple[torch.Tensor, torch.Tensor, dict]:
 
     # 1. Load Config
     logger.debug(f"Load config: {path_to_config}")
@@ -189,6 +192,8 @@ def alternative_idea_compute_mapping(
         lambda_spot_entropy=loss_weights["lambda_spot_entropy"],
         normalize_by_initial=True,
         warmup_iters=1,
+        k=model_config["K"],
+        use_cm=bool(training_config["use_cm"]),
     )
 
     optimizer = optim.Adam(model.parameters(), lr=training_config["lr"])
@@ -199,12 +204,27 @@ def alternative_idea_compute_mapping(
 
     # Collect per-epoch losses for plotting: individual components + total
     losses = {
-        "total": [],
-        "rec_spot": [],
-        "rec_state": [],
-        "clust": [],
-        "state_entropy": [],
-        "spot_entropy": []
+        "total-weighted": [],
+        "rec_spot": {
+            "weight": loss_weights["lambda_rec_spot"],
+            "values": []
+        },
+        "rec_state": {
+            "weight": loss_weights["lambda_rec_state"],
+            "values": []
+        },
+        "clust": {
+            "weight": loss_weights["lambda_clust"],
+            "values": []
+        },
+        "state_entropy": {
+            "weight": loss_weights["lambda_state_entropy"],
+            "values": []
+        },
+        "spot_entropy": {
+            "weight": loss_weights["lambda_spot_entropy"],
+            "values": []
+        }
     }
 
     def to_scalar(t):
@@ -218,6 +238,7 @@ def alternative_idea_compute_mapping(
 
     # Initialize A so we can safely return it even when epochs == 0
     A = None
+    B = None
 
     for epoch in range(int(training_config["epochs"])):
         optimizer.zero_grad()
@@ -261,12 +282,12 @@ def alternative_idea_compute_mapping(
         optimizer.step()
 
         # Collect loss values
-        losses["total"].append(to_scalar(total_loss))
-        losses["rec_spot"].append(to_scalar(loss_dict.get("rec_spot")))
-        losses["rec_state"].append(to_scalar(loss_dict.get("rec_state")))
-        losses["clust"].append(to_scalar(loss_dict.get("clust")))
-        losses["state_entropy"].append(to_scalar(loss_dict.get("state_entropy")))
-        losses["spot_entropy"].append(to_scalar(loss_dict.get("spot_entropy")))
+        losses["total-weighted"].append(to_scalar(total_loss))
+        losses["rec_spot"]["values"].append(to_scalar(loss_dict.get("rec_spot")))
+        losses["rec_state"]["values"].append(to_scalar(loss_dict.get("rec_state")))
+        losses["clust"]["values"].append(to_scalar(loss_dict.get("clust")))
+        losses["state_entropy"]["values"].append(to_scalar(loss_dict.get("state_entropy")))
+        losses["spot_entropy"]["values"].append(to_scalar(loss_dict.get("spot_entropy")))
 
         # Logging: verbose -> log every epoch at DEBUG, normal -> log every 10 epochs at INFO
         if verbose_logging:
@@ -275,16 +296,85 @@ def alternative_idea_compute_mapping(
             if epoch % 10 == 0:
                 logger.info(f"Epoch {epoch:03d} | Total Loss: {total_loss.item():.4f}")
 
-    # If no forward pass happened (e.g. epochs == 0), run one inference forward to produce A
-    if A is None:
-        logger.debug("No training epochs executed; running one forward pass to obtain mapping A.")
-        model.eval()
-        with torch.no_grad():
-            A, B, h, M_rec, F = model(Z, edge_index)
-        model.train()
+    if save_intermediate:
+        logger.info("Saving intermediate results...")
+        folder_intermediate = path_to_config.parent / "intermediate"
+        folder_intermediate.mkdir(parents=True, exist_ok=True)
+
+        df = pd.DataFrame(X.detach().cpu().numpy())
+        df.to_csv(folder_intermediate / "X.csv", index=False)
+
+        df = pd.DataFrame(Z.detach().cpu().numpy())
+        df.to_csv(folder_intermediate / "Z.csv", index=False)
+
+        df = pd.DataFrame(X_shared.detach().cpu().numpy())
+        df.to_csv(folder_intermediate / "X_shared.csv", index=False)
+
+        df = pd.DataFrame(Z_shared.detach().cpu().numpy())
+        df.to_csv(folder_intermediate / "Z_shared.csv", index=False)
+
+        df = pd.DataFrame(A.detach().cpu().numpy())
+        df.to_csv(folder_intermediate / "A.csv", index=False)
+
+        df = pd.DataFrame(B.detach().cpu().numpy())
+        df.to_csv(folder_intermediate / "B.csv", index=False)
+
+        C = torch.matmul(A, B)
+        df = pd.DataFrame(C.detach().cpu().numpy())
+        df.to_csv(folder_intermediate / "C.csv", index=False)
+
+        A_thresh = A.detach().cpu().clone()
+        A_thresh[A_thresh < 0.1] = 0.0
+        df_weight = pd.DataFrame(A_thresh.numpy())
+        df_weight.to_csv(folder_intermediate / 'A_thresh.csv', index=False)
+
+        B_thresh = B.detach().cpu().clone()
+        B_thresh[B_thresh < 0.1] = 0.0
+        df_weight = pd.DataFrame(B_thresh.numpy())
+        df_weight.to_csv(folder_intermediate / 'B_thresh.csv', index=False)
+
+        C_thresh = C.detach().cpu().clone()
+        C_thresh[C_thresh < 0.1] = 0.0
+        df_weight = pd.DataFrame(C_thresh.numpy())
+        df_weight.to_csv(folder_intermediate / 'C_thresh.csv', index=False)
+
+        # idx = torch.argmax(A, dim=1, keepdim=True)
+        # A_argmax = torch.zeros_like(A).scatter_(1, idx, 1.0)
+        # pd.DataFrame(A_argmax.detach().cpu().numpy()).to_csv(folder_intermediate / "A_argmax.csv", index=False)
+
+        # idx = torch.argmax(B, dim=1, keepdim=True)
+        # B_argmax = torch.zeros_like(B).scatter_(1, idx, 1.0)
+        # pd.DataFrame(B_argmax.detach().cpu().numpy()).to_csv(folder_intermediate / "B_argmax.csv", index=False)
+
+        # idx = torch.argmax(C, dim=1, keepdim=True)
+        # C_argmax = torch.zeros_like(C).scatter_(1, idx, 1.0)
+        # pd.DataFrame(C_argmax.detach().cpu().numpy()).to_csv(folder_intermediate / "C_argmax.csv", index=False)
+
+        p = torch.mean(B, dim=0)
+        pd.DataFrame(p.detach().cpu().numpy()).to_csv(folder_intermediate / "p.csv", index=False)
+
+        B_normalized = B / (torch.sum(B, dim=0) + 1e-6)  # (K x C)
+        df_weight = pd.DataFrame(B_normalized.detach().cpu().numpy())
+        df_weight.to_csv(folder_intermediate / 'B_normalized.csv', index=False)
+
+        M = torch.matmul(B.t(), X)
+        df = pd.DataFrame(M.detach().cpu().numpy())
+        df.to_csv(folder_intermediate / "M.csv", index=False)
+
+        M_normalized = torch.matmul(B_normalized.t(), X)
+        df = pd.DataFrame(M_normalized.detach().cpu().numpy())
+        df.to_csv(folder_intermediate / "M_normalized.csv", index=False)
+
+        Z_prime = torch.matmul(A, X)
+        df = pd.DataFrame(Z_prime.detach().cpu().numpy())
+        df.to_csv(folder_intermediate / "Z_prime.csv", index=False)
+
+        CM_normalized = torch.matmul(C, M_normalized)
+        df = pd.DataFrame(CM_normalized.detach().cpu().numpy())
+        df.to_csv(folder_intermediate / "CM_normalized.csv", index=False)
 
     logger.info("Alignment complete.")
-    return A, losses
+    return A, B, losses
 
 
 def main(
@@ -293,9 +383,9 @@ def main(
     output_path: Optional[Path],
     mapping_output_path: Optional[Path] = None,
     verbose_logging: bool = False
-) -> AnnData:
+) -> tuple[AnnData, dict]:
 
-    TORCH_DEVICE = "cpu"
+    TORCH_DEVICE = "mps"
 
     # Step 1: Load data
     logger.info("Load input scRNA and ST data...")
@@ -305,17 +395,46 @@ def main(
 
     # Step 2: Map data using AlternativeIdea
     spot_to_cell_map: torch.Tensor
-    spot_to_cell_map, losses = alternative_idea_compute_mapping(
+    spot_to_cell_map, cell_to_cell_type, losses = alternative_idea_compute_mapping(
         config_path,
         adata_sc.copy(),
         adata_st.copy(),
         verbose_logging=verbose_logging,
-        use_device=TORCH_DEVICE
+        use_device=TORCH_DEVICE,
+        save_intermediate=True,  # todo. temp.
     )  # S x C, plus loss history
     logger.info("Obtained spot-to-cell mapping AnnData.")
     assert spot_to_cell_map.shape == (adata_st.n_obs, adata_sc.n_obs), "dims passen nicht"
 
-    mapping_config, _, _, _, _ = load_config(config_path)
+    mapping_config, _, _, training_config, _ = load_config(config_path)
+
+    # Save end values of loss terms (value after last epoch) to a csv file
+    loss_dir = config_path.parent / "loss"
+    loss_dir.mkdir(parents=True, exist_ok=True)
+
+    # take last (final) values
+    # row = {"total_weighted": losses["total-weighted"][-1]}
+    losses_after_last_epoch = {}
+
+    for comp in ("rec_spot", "rec_state", "clust", "state_entropy", "spot_entropy"):
+        comp_vals = losses.get(comp, {})
+        val = None
+        weight = None
+        if isinstance(comp_vals, dict):
+            vals_list = comp_vals.get("values", [])
+            weight = comp_vals.get("weight")
+            if len(vals_list) > 0:
+                val = vals_list[-1]
+
+        # Round unweighted final value to 2 decimals for clarity (handle None)
+        losses_after_last_epoch[f"{comp}"] = round(float(val), 2) if val is not None else None
+
+        # row[f"{comp}_weight"] = weight
+        # row[f"{comp}_weighted"] = (val * weight) if (val is not None and weight is not None) else None
+
+    df_end = pd.DataFrame([losses_after_last_epoch])
+    df_end.to_csv(loss_dir / "losses_end.csv", index=False)
+    logger.info(f"Saved final loss values to {loss_dir / 'losses_end.csv'}")
 
     # Step 2.1 Create plots for loss curves
     create_loss_plots(losses, config_path.parent / "loss")
@@ -323,6 +442,7 @@ def main(
     # Step 3 (optional): Apply one-hot encoding to mapping
     logger.info("Apply deterministic mapping" if mapping_config["deterministic"] else "Keep probabilistic mapping")
     if mapping_config["deterministic"]:
+        # todo.
         argmax_idx = torch.argmax(spot_to_cell_map, dim=1, keepdim=True)  # for each spot (column), index of max cell / cell type
         spot_to_cell_map = torch.zeros_like(spot_to_cell_map)
         spot_to_cell_map.scatter_(1, argmax_idx, 1.0)
@@ -344,7 +464,20 @@ def main(
 
     # Step 4: Compute Z' out of the mapping (expected gene expression per spot, scRNA data weighted by mapping)
     adata_sc_tensor = torch.as_tensor(adata_sc.X, dtype=torch.float32, device=TORCH_DEVICE)
-    predicted_spot_expressions = torch.matmul(spot_to_cell_map, adata_sc_tensor)  # S x G
+
+    if training_config["use_cm"]:
+        logger.info("Using CM for final mapping output as per config (training.use_cm=true)")
+        # Compute C = A @ B
+        C = torch.matmul(spot_to_cell_map, cell_to_cell_type)  # S x T
+
+        # Compute M = B_normalized^T @ X
+        B_normalized = cell_to_cell_type / (torch.sum(cell_to_cell_type, dim=0) + 1e-6)  # (K x C)
+        M = torch.matmul(B_normalized.t(), adata_sc_tensor)  # T x G
+
+        # Compute Z' = C @ M
+        predicted_spot_expressions = torch.matmul(C, M)  # S x G
+    else:
+        predicted_spot_expressions = torch.matmul(spot_to_cell_map, adata_sc_tensor)  # S x G
 
     # Transpose to G x S
     predicted_spot_expressions = predicted_spot_expressions.T  # now G x S
@@ -372,23 +505,23 @@ def main(
         logger.debug("No output path provided, skipping CSV export.")
 
     # Step 6: Return result
-    return adata_result
+    return adata_result, losses_after_last_epoch
 
 
 def create_loss_plots(losses, loss_dir):
 
     loss_dir.mkdir(parents=True, exist_ok=True)
 
-    loss_fig_path = loss_dir / "loss–curve.png"
+    loss_fig_path = loss_dir / "loss–curves-weighted.png"
     plt.figure()
     # Plot individual components + total
-    epochs = list(range(len(losses["total"])))
-    plt.plot(epochs, losses["total"], label="total", linewidth=2, color="black")
-    plt.plot(epochs, losses["rec_spot"], label="rec_spot")
-    plt.plot(epochs, losses["rec_state"], label="rec_state")
-    plt.plot(epochs, losses["clust"], label="clust")
-    plt.plot(epochs, losses["state_entropy"], label="state_entropy")
-    plt.plot(epochs, losses["spot_entropy"], label="spot_entropy")
+    epochs = list(range(len(losses["total-weighted"])))
+    plt.plot(epochs, losses["total-weighted"], label="total-weighted", linewidth=2, color="black")
+    plt.plot(epochs, list(v * losses["rec_spot"]["weight"] for v in losses["rec_spot"]["values"]), label="rec_spot-weighted")
+    plt.plot(epochs, list(v * losses["rec_state"]["weight"] for v in losses["rec_state"]["values"]), label="rec_state-weighted")
+    plt.plot(epochs, list(v * losses["clust"]["weight"] for v in losses["clust"]["values"]), label="clust-weighted")
+    plt.plot(epochs, list(v * losses["state_entropy"]["weight"] for v in losses["state_entropy"]["values"]), label="state_entropy-weighted")
+    plt.plot(epochs, list(v * losses["spot_entropy"]["weight"] for v in losses["spot_entropy"]["values"]), label="spot_entropy-weighted")
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Loss Curve (components + total)")
@@ -399,10 +532,10 @@ def create_loss_plots(losses, loss_dir):
     plt.close()
     logger.info(f"Saved loss curve to {loss_fig_path}")
 
-    num_epochs = len(losses.get("total", []))
+    num_epochs = len(losses.get("total-weighted", []))
 
     # Components (order for plotting)
-    components = ("total", "rec_spot", "rec_state", "clust", "state_entropy", "spot_entropy")
+    components = ("rec_spot", "rec_state", "clust", "state_entropy", "spot_entropy")
 
     # Ensure epochs list is available
     epochs = list(range(num_epochs))
@@ -410,14 +543,11 @@ def create_loss_plots(losses, loss_dir):
     # Save one plot per loss component
     for comp in components:
         plt.figure()
-        if comp == "total":
-            y = losses.get("total", [])
-        else:
-            y = losses.get(comp, [])
-        plt.plot(epochs, y, label=comp, linewidth=2 if comp == "total" else 1)
+        y = losses[comp]["values"]
+        plt.plot(epochs, y, label=comp, linewidth=1)
         plt.xlabel("Epoch")
         plt.ylabel("Loss")
-        plt.title(f"Loss: {comp}")
+        plt.title(f"Loss: {comp} - unweighted")
         plt.grid(True)
         plt.legend()
         plt.tight_layout()

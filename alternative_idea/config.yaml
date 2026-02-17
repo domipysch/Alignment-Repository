@@ -13,6 +13,7 @@ training:
   epochs: 1
   dropout_decoder: 0.0
   normalize_and_log: false
+  use_cm: false
 loss_weights:
   lambda_rec_spot: 1.0
   lambda_rec_state: 1.0

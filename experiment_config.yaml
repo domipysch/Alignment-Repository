@@ -13,12 +13,13 @@ model:
   dec_hidden_dim:
     - 256
   K:
-    - 5
+    - 20
 training:
   lr:
 #    - 0.001
-    - 0.005
-#    - 0.008
+#    - 0.002
+#    - 0.005
+    - 0.008
 #    - 0.010
   epochs:
     - 1000
@@ -26,9 +27,37 @@ training:
     - 0.0
   normalize_and_log:
     - false
+  use_cm:
+    - true
 loss_weights:
   - lambda_rec_spot: 1.0
-    lambda_rec_state: 1.0
-    lambda_clust: 1.0
-    lambda_state_entropy: 0.0
-    lambda_spot_entropy: 0.0
+    lambda_rec_state: 0
+    lambda_clust: 0
+    lambda_state_entropy: 0.1
+    lambda_spot_entropy: 0
+  - lambda_rec_spot: 1.0
+    lambda_rec_state: 0
+    lambda_clust: 0
+    lambda_state_entropy: 0.1
+    lambda_spot_entropy: 0.05
+  - lambda_rec_spot: 1.0
+    lambda_rec_state: 0
+    lambda_clust: 0
+    lambda_state_entropy: 0.1
+    lambda_spot_entropy: 0.1
+  - lambda_rec_spot: 1.0
+    lambda_rec_state: 0
+    lambda_clust: 0
+    lambda_state_entropy: 0.1
+    lambda_spot_entropy: 0.2
+  - lambda_rec_spot: 1.0
+    lambda_rec_state: 0
+    lambda_clust: 0
+    lambda_state_entropy: 0.1
+    lambda_spot_entropy: 0.5
+  - lambda_rec_spot: 1.0
+    lambda_rec_state: 0
+    lambda_clust: 0
+    lambda_state_entropy: 0.1
+    lambda_spot_entropy: 1.0
+

@@ -45,12 +45,28 @@ def load_st_adata(dataset_folder: str) -> ad.AnnData:
 if __name__ == "__main__":
 
     dataset_from = "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_Datasets/03_MouseSSP"
-    dataset_to = "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_Datasets/03_MouseSSP_Mini"
-    target_nr_sc_cells = 15
-    target_nr_sc_genes = 30
-    target_nr_st_spots = 10
-    target_nr_st_genes = 20
-    target_nr_shared_genes = 5
+    dataset_to = "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_Datasets/03_MouseSSP_Large"
+
+    # Config for mini
+    # target_nr_sc_cells = 15
+    # target_nr_sc_genes = 30
+    # target_nr_st_spots = 10
+    # target_nr_st_genes = 20
+    # target_nr_shared_genes = 5
+
+    # Config for midi
+    # target_nr_sc_cells = 100
+    # target_nr_sc_genes = 300
+    # target_nr_st_spots = 80
+    # target_nr_st_genes = 240
+    # target_nr_shared_genes = 15
+
+    # Config for large
+    target_nr_sc_cells = 1000
+    target_nr_sc_genes = 5000
+    target_nr_st_spots = 800
+    target_nr_st_genes = 33
+    target_nr_shared_genes = 33
 
     rng = np.random.default_rng()  # Zufallszahlengenerator für reproduzierbares Sampling (ohne festen Seed)
 

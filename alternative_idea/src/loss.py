@@ -16,6 +16,8 @@ class AlternativeIdeaLoss(nn.Module):
         eps: float = 1e-8,
         normalize_by_initial: bool = True,
         warmup_iters: int = 1,
+        k: int = 20,
+        use_cm: bool = False,
     ):
         super(AlternativeIdeaLoss, self).__init__()
         self.lambda_rec_spot = lambda_rec_spot
@@ -24,6 +26,8 @@ class AlternativeIdeaLoss(nn.Module):
         self.lambda_state_entropy = lambda_state_entropy
         self.lambda_spot_entropy = lambda_spot_entropy
         self.eps = eps
+        self.lnK = torch.log(torch.tensor(k, dtype=torch.float32))
+
         # Normalization / baseline settings for rec_state and clust
         self.normalize_by_initial = bool(normalize_by_initial)
         self.warmup_iters = int(warmup_iters) if warmup_iters >= 1 else 1
@@ -33,6 +37,8 @@ class AlternativeIdeaLoss(nn.Module):
         self.register_buffer("_init_rec_state", torch.tensor(float("nan")))
         self.register_buffer("_init_clust", torch.tensor(float("nan")))
 
+        self.use_cm = use_cm
+
         # vielleicht ist das mit dem mean overengineered und wir brauchen einfach nur ersten wert. todo. check.
         # Accumulators used during warmup to compute the baseline averages
         self._acc_rec_state = 0.0
@@ -40,7 +46,8 @@ class AlternativeIdeaLoss(nn.Module):
         self._forward_count = 0
         logger.debug("AlternativeIdeaLoss initialized")
 
-    def get_rec_spot_loss(self, A: Tensor, X_shared: Tensor, Z_shared: Tensor) -> Tensor:
+
+    def get_rec_spot_loss(self, A: Tensor, B: Tensor, X_shared: Tensor, Z_shared: Tensor) -> Tensor:
         """
         Eq (9): Scale-invariant reconstruction loss (Z' vs Z on shared genes).
 
@@ -57,14 +64,21 @@ class AlternativeIdeaLoss(nn.Module):
                 f"but Z_marker has {Z_shared.shape[1]} genes."
             )
 
-        # 1. Create Z_prime (The augmented spot data)
-        # (S x C) @ (C x G_shared) -> (S x G_shared)
-        Z_prime = torch.matmul(A, X_shared)
+        # 1. Create Z_prime (The augmented spot data reconstructed from the scRNA-seq reference)
+        if self.use_cm:
 
-        # print("Z_shared")
-        # print(Z_shared)
-        # print("Z_prime")
-        # print(Z_prime)
+            C = torch.matmul(A, B)  # (S x K)
+
+            # Compute B_normalized: Normalize B^T by the number of cells assigned to each state to prevent scale issues
+            B_normalized_sum_over_types_1 = B / (torch.sum(B, dim=0) + self.eps)  # (K x C)
+
+            M = torch.matmul(B_normalized_sum_over_types_1.t(), X_shared)  # (K x G_shared)
+            # M = torch.matmul(B.t(), X_shared)  # (K x G_shared)
+            Z_prime = torch.matmul(C, M)  # (S x G_shared)
+
+        else:
+            # (S x C) @ (C x G_shared) -> (S x G_shared)
+            Z_prime = torch.matmul(A, X_shared)
 
         # 2. Compute Cosine Similarity Components
         # Dot product across the gene dimension for each spot
@@ -214,7 +228,7 @@ class AlternativeIdeaLoss(nn.Module):
             Z_shared: Spatial data on shared genes (S x g_shared)
         """
         # 1. Individual terms (unweighted)
-        l_rec_spot = self.get_rec_spot_loss(A, X_shared, Z_shared)
+        l_rec_spot = self.get_rec_spot_loss(A, B, X_shared, Z_shared)
         l_rec_state = self.get_rec_state_loss(M_rec, A, B, X)
         l_clust = self.get_clust_loss(A, h, B, F)
         l_state_entropy = self.get_state_entropy_loss(B)
@@ -258,6 +272,11 @@ class AlternativeIdeaLoss(nn.Module):
                 denom_cl = (self._init_clust + self.eps).to(l_clust.device)
                 l_clust_norm = l_clust / denom_cl
 
+        # 3. Normalize l_state_entropy and l_spot_entropy by their maximum possible values to keep them in a comparable range
+        # Max entropy for both is log(K)
+        l_state_entropy /= self.lnK
+        l_spot_entropy /= self.lnK
+
         # 3. Weighted total (use normalized versions for rec_state and clust when available)
         total_loss = (
             self.lambda_rec_spot * l_rec_spot +
@@ -270,9 +289,9 @@ class AlternativeIdeaLoss(nn.Module):
         # Return both the weighted normalized components (for training/plotting) and the raw-weighted ones (for debug)
         return {
             "loss": total_loss,
-            "rec_spot": self.lambda_rec_spot * l_rec_spot,
-            "rec_state": self.lambda_rec_state * l_rec_state_norm,
-            "clust": self.lambda_clust * l_clust_norm,
-            "state_entropy": self.lambda_state_entropy * l_state_entropy,
-            "spot_entropy": self.lambda_spot_entropy * l_spot_entropy,
+            "rec_spot": l_rec_spot,
+            "rec_state": l_rec_state_norm,
+            "clust": l_clust_norm,
+            "state_entropy": l_state_entropy,
+            "spot_entropy": l_spot_entropy,
         }

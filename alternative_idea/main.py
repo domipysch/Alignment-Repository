@@ -12,13 +12,13 @@ import torch.optim as optim
 import logging
 from anndata import AnnData
 from MPA_Code.utils.io import anndata_to_csv
-from MPA_Code.alternative_idea.src.utils import load_sc_adata, load_st_adata, fmt_nonzero_4
+from MPA_Code.alternative_idea.src.utils import load_sc_adata, load_st_adata, fmt_nonzero_4, create_loss_plots, \
+    dump_loss_logs
 from MPA_Code.alternative_idea.src.model import AlternativeIdeaModel
 from MPA_Code.alternative_idea.src.loss import AlternativeIdeaLoss
 from MPA_Code.alternative_idea.src.spatial_graph import build_spatial_graph, SpatialGraphType
 from MPA_Code.alternative_idea.src.dataset import prepare_tensors_from_input
 from MPA_Code.alternative_idea.src.utils import graph_type_from_config
-import matplotlib.pyplot as plt
 logger = logging.getLogger(__name__)
 
 
@@ -134,7 +134,7 @@ def alternative_idea_compute_mapping(
     logger.info(f"Using device: {device}")
 
     # (Optional) 3. Preprocess data (only for mapping): Normalize & Log-transform
-    if training_config.get("normalize_and_log", True):
+    if training_config["normalize_and_log"]:
         logger.info("Normalize & Log-transform gene expression and spatial data")
         sc.pp.normalize_total(adata_sc)
         sc.pp.normalize_total(adata_st)
@@ -301,27 +301,27 @@ def alternative_idea_compute_mapping(
         folder_intermediate = path_to_config.parent / "intermediate"
         folder_intermediate.mkdir(parents=True, exist_ok=True)
 
-        df = pd.DataFrame(X.detach().cpu().numpy())
-        df.to_csv(folder_intermediate / "X.csv", index=False)
+        # df = pd.DataFrame(X.detach().cpu().numpy())
+        # df.to_csv(folder_intermediate / "X.csv", index=False)
 
-        df = pd.DataFrame(Z.detach().cpu().numpy())
-        df.to_csv(folder_intermediate / "Z.csv", index=False)
+        # df = pd.DataFrame(Z.detach().cpu().numpy())
+        # df.to_csv(folder_intermediate / "Z.csv", index=False)
 
-        df = pd.DataFrame(X_shared.detach().cpu().numpy())
-        df.to_csv(folder_intermediate / "X_shared.csv", index=False)
+        # df = pd.DataFrame(X_shared.detach().cpu().numpy())
+        # df.to_csv(folder_intermediate / "X_shared.csv", index=False)
 
-        df = pd.DataFrame(Z_shared.detach().cpu().numpy())
-        df.to_csv(folder_intermediate / "Z_shared.csv", index=False)
+        # df = pd.DataFrame(Z_shared.detach().cpu().numpy())
+        # df.to_csv(folder_intermediate / "Z_shared.csv", index=False)
 
-        df = pd.DataFrame(A.detach().cpu().numpy())
-        df.to_csv(folder_intermediate / "A.csv", index=False)
+        # df = pd.DataFrame(A.detach().cpu().numpy())
+        # df.to_csv(folder_intermediate / "A.csv", index=False)
 
-        df = pd.DataFrame(B.detach().cpu().numpy())
-        df.to_csv(folder_intermediate / "B.csv", index=False)
+        # df = pd.DataFrame(B.detach().cpu().numpy())
+        # df.to_csv(folder_intermediate / "B.csv", index=False)
 
         C = torch.matmul(A, B)
-        df = pd.DataFrame(C.detach().cpu().numpy())
-        df.to_csv(folder_intermediate / "C.csv", index=False)
+        # df = pd.DataFrame(C.detach().cpu().numpy())
+        # df.to_csv(folder_intermediate / "C.csv", index=False)
 
         A_thresh = A.detach().cpu().clone()
         A_thresh[A_thresh < 0.1] = 0.0
@@ -338,6 +338,7 @@ def alternative_idea_compute_mapping(
         df_weight = pd.DataFrame(C_thresh.numpy())
         df_weight.to_csv(folder_intermediate / 'C_thresh.csv', index=False)
 
+
         # idx = torch.argmax(A, dim=1, keepdim=True)
         # A_argmax = torch.zeros_like(A).scatter_(1, idx, 1.0)
         # pd.DataFrame(A_argmax.detach().cpu().numpy()).to_csv(folder_intermediate / "A_argmax.csv", index=False)
@@ -353,28 +354,101 @@ def alternative_idea_compute_mapping(
         p = torch.mean(B, dim=0)
         pd.DataFrame(p.detach().cpu().numpy()).to_csv(folder_intermediate / "p.csv", index=False)
 
-        B_normalized = B / (torch.sum(B, dim=0) + 1e-6)  # (K x C)
-        df_weight = pd.DataFrame(B_normalized.detach().cpu().numpy())
-        df_weight.to_csv(folder_intermediate / 'B_normalized.csv', index=False)
+        # B_normalized = B / (torch.sum(B, dim=0) + 1e-6)  # (K x C)
+        # df_weight = pd.DataFrame(B_normalized.detach().cpu().numpy())
+        # df_weight.to_csv(folder_intermediate / 'B_normalized.csv', index=False)
 
-        M = torch.matmul(B.t(), X)
-        df = pd.DataFrame(M.detach().cpu().numpy())
-        df.to_csv(folder_intermediate / "M.csv", index=False)
+        # M = torch.matmul(B.t(), X)
+        # df = pd.DataFrame(M.detach().cpu().numpy())
+        # df.to_csv(folder_intermediate / "M.csv", index=False)
 
-        M_normalized = torch.matmul(B_normalized.t(), X)
-        df = pd.DataFrame(M_normalized.detach().cpu().numpy())
-        df.to_csv(folder_intermediate / "M_normalized.csv", index=False)
+        # M_normalized = torch.matmul(B_normalized.t(), X)
+        # df = pd.DataFrame(M_normalized.detach().cpu().numpy())
+        # df.to_csv(folder_intermediate / "M_normalized.csv", index=False)
 
-        Z_prime = torch.matmul(A, X)
-        df = pd.DataFrame(Z_prime.detach().cpu().numpy())
-        df.to_csv(folder_intermediate / "Z_prime.csv", index=False)
+        # Z_prime = torch.matmul(A, X)
+        # df = pd.DataFrame(Z_prime.detach().cpu().numpy())
+        # df.to_csv(folder_intermediate / "Z_prime.csv", index=False)
 
-        CM_normalized = torch.matmul(C, M_normalized)
-        df = pd.DataFrame(CM_normalized.detach().cpu().numpy())
-        df.to_csv(folder_intermediate / "CM_normalized.csv", index=False)
+        # CM_normalized = torch.matmul(C, M_normalized)
+        # df = pd.DataFrame(CM_normalized.detach().cpu().numpy())
+        # df.to_csv(folder_intermediate / "CM_normalized.csv", index=False)
+
+        if mapping_config.get("deterministic"):
+
+            # B: Argmax per cell -> One-hot pro Zeile
+            argmax_idx = torch.argmax(B, dim=1, keepdim=True)
+            B_argmax = torch.zeros_like(B)
+            B_argmax.scatter_(1, argmax_idx, 1.0)
+            df_weight = pd.DataFrame(B_argmax.detach().cpu().numpy())
+            df_weight.to_csv(folder_intermediate / 'B_argmax.csv', index=False)
+
+            # C: Argmax per spot -> One-hot pro Zeile
+            C_argmax = torch.matmul(A, B_argmax)
+            argmax_idx = torch.argmax(C_argmax, dim=1, keepdim=True)
+            C_argmax = torch.zeros_like(C_argmax)
+            C_argmax.scatter_(1, argmax_idx, 1.0)
+            df_weight = pd.DataFrame(C_argmax.detach().cpu().numpy())
+            df_weight.to_csv(folder_intermediate / 'C_argmax.csv', index=False)
+
+            # todo. ggf. auch andere det dumpen.
 
     logger.info("Alignment complete.")
     return A, B, losses
+
+
+def compute_gene_expression_prediction(
+    spot_to_cell_map: torch.Tensor,
+    cell_to_cell_type: torch.Tensor,
+    adata_sc: AnnData,
+    adata_st: AnnData,
+    deterministic_mapping: bool,
+    torch_device: str,
+    use_cm: bool,
+) -> AnnData:
+
+    adata_sc_tensor = torch.as_tensor(adata_sc.X, dtype=torch.float32, device=torch_device)
+
+    if deterministic_mapping:
+
+        # Leave A is it is
+        pass
+
+        # B: Argmax per cell -> One-hot pro Zeile
+        argmax_idx = torch.argmax(cell_to_cell_type, dim=1, keepdim=True)
+        cell_to_cell_type = torch.zeros_like(cell_to_cell_type)
+        cell_to_cell_type.scatter_(1, argmax_idx, 1.0)
+
+        # C
+        C = torch.matmul(spot_to_cell_map, cell_to_cell_type)  # S x T
+        argmax_idx = torch.argmax(C, dim=1, keepdim=True)
+        C_argmax = torch.zeros_like(C)
+        C_argmax.scatter_(1, argmax_idx, 1.0)
+
+    else:
+        # A, B leave is they are
+        C = torch.matmul(spot_to_cell_map, cell_to_cell_type)  # S x T
+
+    if use_cm:
+        logger.info("Using CM for final mapping output as per config (training.use_cm=true)")
+        # Compute M = B_normalized^T @ X
+        B_normalized = cell_to_cell_type / (torch.sum(cell_to_cell_type, dim=0) + 1e-6)  # (K x C)
+        M = torch.matmul(B_normalized.t(), adata_sc_tensor)  # T x G
+        # Compute Z' = C @ M
+        predicted_spot_expressions = torch.matmul(C, M)  # S x G
+    else:
+        predicted_spot_expressions = torch.matmul(spot_to_cell_map, adata_sc_tensor)  # S x G
+
+    # Transpose to G x S
+    predicted_spot_expressions = predicted_spot_expressions.T  # now G x S
+    assert predicted_spot_expressions.shape == (adata_sc.n_vars, adata_st.n_obs), "dims passen nicht"
+
+    # Create AnnData object for predicted spot expressions
+    adata_result = AnnData(X=predicted_spot_expressions.detach().cpu().numpy())
+    adata_result.obs_names = adata_sc.var_names
+    adata_result.var_names = adata_st.obs_names
+
+    return adata_result
 
 
 def main(
@@ -383,7 +457,9 @@ def main(
     output_path: Optional[Path],
     mapping_output_path: Optional[Path] = None,
     verbose_logging: bool = False
-) -> tuple[AnnData, dict]:
+) -> tuple[AnnData, Optional[AnnData], dict]:
+
+    mapping_config, _, _, training_config, _ = load_config(config_path)
 
     TORCH_DEVICE = "mps"
 
@@ -406,48 +482,13 @@ def main(
     logger.info("Obtained spot-to-cell mapping AnnData.")
     assert spot_to_cell_map.shape == (adata_st.n_obs, adata_sc.n_obs), "dims passen nicht"
 
-    mapping_config, _, _, training_config, _ = load_config(config_path)
+    # Step 3.1: Save end values of loss terms (value after last epoch) to a csv file
+    losses_after_last_epoch = dump_loss_logs(losses, config_path)
 
-    # Save end values of loss terms (value after last epoch) to a csv file
-    loss_dir = config_path.parent / "loss"
-    loss_dir.mkdir(parents=True, exist_ok=True)
-
-    # take last (final) values
-    # row = {"total_weighted": losses["total-weighted"][-1]}
-    losses_after_last_epoch = {}
-
-    for comp in ("rec_spot", "rec_state", "clust", "state_entropy", "spot_entropy"):
-        comp_vals = losses.get(comp, {})
-        val = None
-        weight = None
-        if isinstance(comp_vals, dict):
-            vals_list = comp_vals.get("values", [])
-            weight = comp_vals.get("weight")
-            if len(vals_list) > 0:
-                val = vals_list[-1]
-
-        # Round unweighted final value to 2 decimals for clarity (handle None)
-        losses_after_last_epoch[f"{comp}"] = round(float(val), 2) if val is not None else None
-
-        # row[f"{comp}_weight"] = weight
-        # row[f"{comp}_weighted"] = (val * weight) if (val is not None and weight is not None) else None
-
-    df_end = pd.DataFrame([losses_after_last_epoch])
-    df_end.to_csv(loss_dir / "losses_end.csv", index=False)
-    logger.info(f"Saved final loss values to {loss_dir / 'losses_end.csv'}")
-
-    # Step 2.1 Create plots for loss curves
+    # Step 3.2: Create plots for loss curves
     create_loss_plots(losses, config_path.parent / "loss")
 
-    # Step 3 (optional): Apply one-hot encoding to mapping
-    logger.info("Apply deterministic mapping" if mapping_config["deterministic"] else "Keep probabilistic mapping")
-    if mapping_config["deterministic"]:
-        # todo.
-        argmax_idx = torch.argmax(spot_to_cell_map, dim=1, keepdim=True)  # for each spot (column), index of max cell / cell type
-        spot_to_cell_map = torch.zeros_like(spot_to_cell_map)
-        spot_to_cell_map.scatter_(1, argmax_idx, 1.0)
-
-    # Optional: Save mapping to CSV
+    # Step 3.3: Save mapping to CSV
     if mapping_output_path is not None:
         logger.info(f"Write spot-to-cell mapping to CSV: {mapping_output_path}")
         mapping_adata = AnnData(X=spot_to_cell_map.detach().cpu().numpy())
@@ -463,30 +504,15 @@ def main(
         logger.info(f"Saved spot-to-cell mapping to {mapping_output_path}")
 
     # Step 4: Compute Z' out of the mapping (expected gene expression per spot, scRNA data weighted by mapping)
-    adata_sc_tensor = torch.as_tensor(adata_sc.X, dtype=torch.float32, device=TORCH_DEVICE)
-
-    if training_config["use_cm"]:
-        logger.info("Using CM for final mapping output as per config (training.use_cm=true)")
-        # Compute C = A @ B
-        C = torch.matmul(spot_to_cell_map, cell_to_cell_type)  # S x T
-
-        # Compute M = B_normalized^T @ X
-        B_normalized = cell_to_cell_type / (torch.sum(cell_to_cell_type, dim=0) + 1e-6)  # (K x C)
-        M = torch.matmul(B_normalized.t(), adata_sc_tensor)  # T x G
-
-        # Compute Z' = C @ M
-        predicted_spot_expressions = torch.matmul(C, M)  # S x G
-    else:
-        predicted_spot_expressions = torch.matmul(spot_to_cell_map, adata_sc_tensor)  # S x G
-
-    # Transpose to G x S
-    predicted_spot_expressions = predicted_spot_expressions.T  # now G x S
-    assert predicted_spot_expressions.shape == (adata_sc.n_vars, adata_st.n_obs), "dims passen nicht"
-
-    # Create AnnData object for predicted spot expressions
-    adata_result = AnnData(X=predicted_spot_expressions.detach().cpu().numpy())
-    adata_result.obs_names = adata_sc.var_names
-    adata_result.var_names = adata_st.obs_names
+    adata_prediction_prob = compute_gene_expression_prediction(
+        spot_to_cell_map,
+        cell_to_cell_type,
+        adata_sc,
+        adata_st,
+        False,
+        TORCH_DEVICE,
+        training_config["use_cm"],
+    )
 
     # Step 5 (optional): Export predicted_spot_expressions to CSV
     # - Rows: Genes
@@ -494,7 +520,7 @@ def main(
     if output_path is not None:
         logger.info(f"Write result GEP to CSV: {output_path}")
         anndata_to_csv(
-            adata_result,
+            adata_prediction_prob,
             output_path,
             top_left_label="GEP",
             format_func=fmt_nonzero_4,
@@ -504,57 +530,40 @@ def main(
     else:
         logger.debug("No output path provided, skipping CSV export.")
 
-    # Step 6: Return result
-    return adata_result, losses_after_last_epoch
+    # Step 6 (optional): Apply one-hot encoding to mapping & repeat steps 4 & 5
+    adata_prediction_det = None
+    if mapping_config["deterministic"]:
+        logger.info("Apply deterministic mapping & compute prediction with one-hot encoded mapping")
 
+        adata_prediction_det = compute_gene_expression_prediction(
+            spot_to_cell_map,
+            cell_to_cell_type,
+            adata_sc,
+            adata_st,
+            True,
+            TORCH_DEVICE,
+            training_config["use_cm"],
+        )
 
-def create_loss_plots(losses, loss_dir):
+        if output_path is not None:
 
-    loss_dir.mkdir(parents=True, exist_ok=True)
+            # Edit output_path: append "_deterministic" before file extension
+            output_path_deterministic = output_path.with_name(output_path.stem + "_deterministic" + output_path.suffix)
 
-    loss_fig_path = loss_dir / "loss–curves-weighted.png"
-    plt.figure()
-    # Plot individual components + total
-    epochs = list(range(len(losses["total-weighted"])))
-    plt.plot(epochs, losses["total-weighted"], label="total-weighted", linewidth=2, color="black")
-    plt.plot(epochs, list(v * losses["rec_spot"]["weight"] for v in losses["rec_spot"]["values"]), label="rec_spot-weighted")
-    plt.plot(epochs, list(v * losses["rec_state"]["weight"] for v in losses["rec_state"]["values"]), label="rec_state-weighted")
-    plt.plot(epochs, list(v * losses["clust"]["weight"] for v in losses["clust"]["values"]), label="clust-weighted")
-    plt.plot(epochs, list(v * losses["state_entropy"]["weight"] for v in losses["state_entropy"]["values"]), label="state_entropy-weighted")
-    plt.plot(epochs, list(v * losses["spot_entropy"]["weight"] for v in losses["spot_entropy"]["values"]), label="spot_entropy-weighted")
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.title("Loss Curve (components + total)")
-    plt.grid(True)
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(str(loss_fig_path))
-    plt.close()
-    logger.info(f"Saved loss curve to {loss_fig_path}")
+            logger.info(f"Write result GEP to CSV: {output_path_deterministic}")
+            anndata_to_csv(
+                adata_prediction_det,
+                output_path_deterministic,
+                top_left_label="GEP",
+                format_func=fmt_nonzero_4,
+                uppercase_var_names=True,
+            )
+            logger.info(f"Saved result GEP to {output_path_deterministic}")
+        else:
+            logger.debug("No output path provided, skipping CSV export.")
 
-    num_epochs = len(losses.get("total-weighted", []))
-
-    # Components (order for plotting)
-    components = ("rec_spot", "rec_state", "clust", "state_entropy", "spot_entropy")
-
-    # Ensure epochs list is available
-    epochs = list(range(num_epochs))
-
-    # Save one plot per loss component
-    for comp in components:
-        plt.figure()
-        y = losses[comp]["values"]
-        plt.plot(epochs, y, label=comp, linewidth=1)
-        plt.xlabel("Epoch")
-        plt.ylabel("Loss")
-        plt.title(f"Loss: {comp} - unweighted")
-        plt.grid(True)
-        plt.legend()
-        plt.tight_layout()
-        out_path = loss_dir / f"{comp}.png"
-        plt.savefig(str(out_path))
-        plt.close()
-        logger.info(f"Saved per-loss plot to {out_path}")
+    # Step 7: Return result
+    return adata_prediction_prob, adata_prediction_det, losses_after_last_epoch
 
 
 if __name__ == "__main__":

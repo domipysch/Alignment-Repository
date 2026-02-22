@@ -36,26 +36,36 @@ def create_shared_boxplots(ids: list[int], metrics_folder: Path, output_folder: 
         )
 
 
-def run_config(dataset: Path, run_config_path: Path, save_result_path: Optional[Path], save_mapping_path: Optional[Path], metrics_folder: Path, run_permutation_tests: bool = False) -> dict:
+def run_config(dataset: Path, run_config_path: Path, save_result_path: Optional[Path], save_mapping_path: Optional[Path], metrics_folder: Path, metrics_folder_det: Path, run_permutation_tests: bool = False) -> dict:
     # Determine verbose flag from current logger level
     verbose_flag = logger.getEffectiveLevel() == logging.DEBUG
 
     # Run alignment (G x S)
-    predicted_gep, losses_after_last_epoch = alternative_idea.main(
+    predicted_gep, predicted_gep_det, losses_after_last_epoch = alternative_idea.main(
         dataset,
         run_config_path,
         output_path=save_result_path,
-        mapping_output_path=save_mapping_path,
+        # mapping_output_path=save_mapping_path,
+        mapping_output_path=None,
         verbose_logging=verbose_flag
     )
 
-    # Run individual metrics
+    # Run individual metrics (probabilistic)
     run_all_metrics.main(
         dataset,
         metrics_folder,
         result_gep=predicted_gep,
         run_permutation_tests=run_permutation_tests
     )
+
+    # Run individual metrics (deterministic) if applicable
+    if predicted_gep_det is not None:
+        run_all_metrics.main(
+            dataset,
+            metrics_folder_det,
+            result_gep=predicted_gep_det,
+            run_permutation_tests=run_permutation_tests
+        )
 
     return losses_after_last_epoch
 
@@ -139,6 +149,9 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
     result_folder.mkdir(parents=True, exist_ok=False)
     metric_folder.mkdir(parents=True, exist_ok=False)
 
+    # Copy experiment config to result folder for reference
+    shutil.copy(experiment_config, result_folder / "experiment_config.yml")
+
     # Prepare summary CSV
     summary_path = result_folder / "summary.csv"
     write_header = not summary_path.exists()
@@ -179,6 +192,11 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
             metric_dir = metric_folder / str(run_id)
             metric_dir.mkdir(parents=True, exist_ok=False)
 
+            # if mode is 'deterministic', then also create a folder "<run_id>_det"
+            if base_cfg['mapping']['deterministic']:
+                metric_dir_det = metric_folder / f"{run_id}_det"
+                metric_dir_det.mkdir(parents=True, exist_ok=False)
+
             start = time.time()
             try:
                 logger.info(f"Starting run {run_id}/{total_runs - 1} -> writing to {run_dir}")
@@ -188,6 +206,7 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
                     (run_dir / "gep.csv") if save_result else None,
                     (run_dir / "mapping.csv") if save_result else None,
                     metric_dir,
+                    metric_dir_det if metric_dir_det is not None else "",
                     run_permutation_tests=run_permutation_tests
                 )
                 duration = time.time() - start
@@ -214,7 +233,12 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
     # Create shared boxplots
     metric_folder_shared = metric_folder / "shared"
     metric_folder_shared.mkdir(parents=True, exist_ok=False)
-    create_shared_boxplots(list(range(run_id)), metric_folder, metric_folder_shared, run_permutation_tests=run_permutation_tests)
+    create_shared_boxplots(
+        list(range(run_id)) + list(f"{runid}_det" for runid in range(run_id)) if base_cfg['mapping']['deterministic'] else list(range(run_id)),
+        metric_folder,
+        metric_folder_shared,
+        run_permutation_tests=run_permutation_tests
+    )
 
 
 if __name__ == "__main__":

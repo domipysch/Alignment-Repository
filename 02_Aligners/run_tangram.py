@@ -104,7 +104,7 @@ def tangram_align_data(
             num_epochs=500,
             device='cpu',
             lambda_g1=1,
-            lambda_g2=1,
+            # lambda_g2=1,
         )  # C x S
         assert ad_map.n_obs == adata_sc_map.n_obs
         assert ad_map.n_vars == adata_st.n_obs

@@ -1,6 +1,6 @@
 mapping:
   deterministic:
-    - false
+    - true
 graph:
   type: knn
   k:
@@ -34,30 +34,4 @@ loss_weights:
     lambda_rec_state: 0
     lambda_clust: 0
     lambda_state_entropy: 0.1
-    lambda_spot_entropy: 0
-  - lambda_rec_spot: 1.0
-    lambda_rec_state: 0
-    lambda_clust: 0
-    lambda_state_entropy: 0.1
-    lambda_spot_entropy: 0.05
-  - lambda_rec_spot: 1.0
-    lambda_rec_state: 0
-    lambda_clust: 0
-    lambda_state_entropy: 0.1
     lambda_spot_entropy: 0.1
-  - lambda_rec_spot: 1.0
-    lambda_rec_state: 0
-    lambda_clust: 0
-    lambda_state_entropy: 0.1
-    lambda_spot_entropy: 0.2
-  - lambda_rec_spot: 1.0
-    lambda_rec_state: 0
-    lambda_clust: 0
-    lambda_state_entropy: 0.1
-    lambda_spot_entropy: 0.5
-  - lambda_rec_spot: 1.0
-    lambda_rec_state: 0
-    lambda_clust: 0
-    lambda_state_entropy: 0.1
-    lambda_spot_entropy: 1.0
-

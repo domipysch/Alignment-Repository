@@ -18,20 +18,20 @@ import metrics.run_all_permutation_boxplots as run_all_permutation_boxplots
 logger = logging.getLogger(__name__)
 
 
-def create_shared_boxplots(ids: list[int], metrics_folder: Path, output_folder: Path, run_permutation_tests: bool = False):
+def create_shared_boxplots(ids: list[str], metrics_folder: Path, output_folder: Path, run_permutation_tests: bool = False):
 
     # Run shared metrics
     run_all_shared_boxplots.main(
-        [metrics_folder / f"{id}" for id in ids],
-        list(map(str, ids)),
+        [metrics_folder / s_id for s_id in ids],
+        ids,
         output_folder,
     )
 
     # Run shared permutation test boxplots
     if run_permutation_tests:
         run_all_permutation_boxplots.main(
-            [metrics_folder / f"{id}" for id in ids],
-            list(map(str, ids)),
+            [metrics_folder / s_id for s_id in ids],
+            ids,
             output_folder,
         )
 
@@ -234,7 +234,7 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
     metric_folder_shared = metric_folder / "shared"
     metric_folder_shared.mkdir(parents=True, exist_ok=False)
     create_shared_boxplots(
-        list(range(run_id)) + list(f"{runid}_det" for runid in range(run_id)) if base_cfg['mapping']['deterministic'] else list(range(run_id)),
+        list(range(run_id)) + list(f"{runid}_det" for runid in range(run_id)) if base_cfg['mapping']['deterministic'] else list(str(rid) for rid in range(run_id)),
         metric_folder,
         metric_folder_shared,
         run_permutation_tests=run_permutation_tests

@@ -5,6 +5,9 @@ import pandas as pd
 import scanpy as sc
 import numpy as np
 import logging
+
+from anndata import AnnData
+
 from utils import load_sc_adata, load_st_adata, fmt_nonzero_4
 import argparse
 from scipy.sparse import issparse
@@ -19,7 +22,7 @@ def tangram_align_data(
     map_clusters: bool,
     cell_type_key: str,
     output_path: Path,
-):
+) -> AnnData:
     """
     Run Tangram alignment on a prepared dataset in given folder.
     Saves prediction GEP CSV to output_path.
@@ -156,12 +159,17 @@ def tangram_align_data(
     # Check: Rows = Genes, Columns = Spots
     assert expr.shape == (adata_sc.n_vars, adata_st.n_obs), "dims passen nicht"
 
+    # Make ad_ge obs_names uppercase (gene names in uppercase in input data, also in output)
+    ad_ge.obs_names = [s.upper() for s in ad_ge.obs_names]
+
     # Step 6: Write CSV
     logger.info(f"Write result GEP to CSV: {output_path}")
-    df = pd.DataFrame(expr, index=list(s.upper() for s in ad_ge.obs_names), columns=ad_ge.var_names)
+    df = pd.DataFrame(expr, index=ad_ge.obs_names, columns=ad_ge.var_names)
     df_formatted = df.map(fmt_nonzero_4)
     df_formatted.to_csv(output_path, index=True, index_label="GEP")  # "GEP" in cell 0,0
     logger.info(f"Saved tangram GEP to {output_path}")
+
+    return ad_ge
 
 
 if __name__ == "__main__":

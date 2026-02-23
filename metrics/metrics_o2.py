@@ -155,15 +155,19 @@ def compute_metrics_per_spot(adata_z, adata_predicted_z, save_cossim_json: Path 
             json.dump(cossim_dict, f, indent=4)
 
 
-def generate_box_plot_metrics_per_gene(adata_predicted_z, output_folder: Path = None) -> None:
+def generate_box_plot_metrics_per_gene(adata_predicted_z, output_folder: Path = None, columns: list[str] = None) -> None:
     """
-    Generate boxplots for all numeric metrics in adata_predicted_z.var.
+    Generate boxplots for numeric metrics in adata_predicted_z.var.
     - All metrics whose (non-NaN) values lie within [0,1] are plotted together in one figure.
     - All other metrics get individual figures (one boxplot dimension per figure).
     - output_folder is optional; if omitted, plots are shown instead of saved.
+    - columns: list of column names to plot; defaults to ['cossim'].
     """
+    if columns is None:
+        columns = ['cossim']
     df_var = adata_predicted_z.var
     numeric = df_var.select_dtypes(include=[np.number])
+    numeric = numeric[[c for c in columns if c in numeric.columns]]
     if numeric.shape[1] == 0:
         raise ValueError("No numeric metrics found in adata_predicted_z.var.")
 
@@ -237,15 +241,20 @@ def generate_box_plot_metrics_per_gene(adata_predicted_z, output_folder: Path = 
         plt.close(fig)
 
 
-def generate_box_plot_metrics_per_spot(adata_predicted_z, output_folder: Path = None) -> None:
+def generate_box_plot_metrics_per_spot(adata_predicted_z, output_folder: Path = None, columns: list[str] = None) -> None:
     """
-    Generate boxplots for all numeric metrics in adata_predicted_z.obs.
+    Generate boxplots for numeric metrics in adata_predicted_z.obs.
     - All metrics whose (non-NaN) values lie within [0,1] are plotted together in one figure.
     - All other metrics get individual figures (one boxplot dimension per figure).
     - output_folder (optional): if provided, plots are saved there as PNGs; otherwise they are shown.
+    - columns: list of column names to plot; defaults to ['cossim'].
     """
+    if columns is None:
+        columns = ['cossim']
+
     df_obs = adata_predicted_z.obs
     numeric = df_obs.select_dtypes(include=[np.number])
+    numeric = numeric[[c for c in columns if c in numeric.columns]]
     if numeric.shape[1] == 0:
         raise ValueError("No numeric metrics found in adata_predicted_z.obs.")
 

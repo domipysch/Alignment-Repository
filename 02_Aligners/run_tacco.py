@@ -3,6 +3,9 @@ import tacco as tc
 import pandas as pd
 import numpy as np
 import logging
+
+from anndata import AnnData
+
 from utils import load_sc_adata, load_st_adata, fmt_nonzero_4
 import argparse
 from scipy.sparse import issparse
@@ -13,7 +16,7 @@ def tacco_align_data(
     deterministic_mapping: bool,
     cell_type_key: str,
     output_path: str,
-):
+) -> AnnData:
     """
     Run TACCO alignment on a prepared dataset in the given folder.
     Saves predicted gene expression per spot (GEP) as CSV to output_path.
@@ -100,6 +103,10 @@ def tacco_align_data(
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     df_formatted.to_csv(output_path, index=True, index_label="GEP")
     logging.info("Saved tacco GEP to %s", output_path)
+
+    # Return reconstruction as AnnData (genes x spots) for potential further use
+    adata_recon = AnnData(X=recon_df.values, obs=adata_sc.var, var=adata_st.obs)
+    return adata_recon
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ import logging
 from utils import load_sc_adata, load_st_adata, fmt_nonzero_4
 import argparse
 from scipy.sparse import issparse
+logger = logging.getLogger(__name__)
 
 
 def tangram_align_data(

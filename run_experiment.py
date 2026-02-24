@@ -173,7 +173,7 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
 
         writer = csv.writer(summary_file)
         if write_header:
-            writer.writerow(["id", "config_path", "output_path", "status", "duration_seconds", "error_message", "L1", "L2", "L3", "L4", "L5"])
+            writer.writerow(["id", "config_path", "output_path", "status", "duration_seconds", "error_message", "L1", "L2", "L3", "L4", "L5", "L6"])
 
         for combo in combo_iter:
             # Build run-specific config
@@ -213,6 +213,7 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
                 writer.writerow([
                     run_id, str(run_config_path), str(result_path), "ok", f"{duration:.3f}", "",
                     losses_after_last_epoch["rec_spot"],
+                    losses_after_last_epoch["rec_gene"],
                     losses_after_last_epoch["rec_state"],
                     losses_after_last_epoch["clust"],
                     losses_after_last_epoch["state_entropy"],
@@ -224,7 +225,7 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
                 duration = time.time() - start
                 tb = traceback.format_exc()
                 logger.error(f"Run {run_id} failed after {duration:.2f}s: {e}\n{tb}")
-                writer.writerow([run_id, str(run_config_path), str(result_path), "error", f"{duration:.3f}", str(e), "", "", "", "", ""])
+                writer.writerow([run_id, str(run_config_path), str(result_path), "error", f"{duration:.3f}", str(e), "", "", "", "", "", ""])
                 # Stop on first error as requested
                 raise
 
@@ -233,8 +234,11 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
     # Create shared boxplots
     metric_folder_shared = metric_folder / "shared"
     metric_folder_shared.mkdir(parents=True, exist_ok=False)
+    run_names = list(map(str, range(run_id)))
+    if base_cfg['mapping']['deterministic']:
+        run_names += list(f"{runid}_det" for runid in range(run_id))
     create_shared_boxplots(
-        list(range(run_id)) + list(f"{runid}_det" for runid in range(run_id)) if base_cfg['mapping']['deterministic'] else list(str(rid) for rid in range(run_id)),
+        run_names,
         metric_folder,
         metric_folder_shared,
         run_permutation_tests=run_permutation_tests

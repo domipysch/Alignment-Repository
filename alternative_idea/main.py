@@ -186,6 +186,7 @@ def alternative_idea_compute_mapping(
     # 7. Initialize Loss and Optimizer
     loss = AlternativeIdeaLoss(
         lambda_rec_spot=loss_weights["lambda_rec_spot"],
+        lambda_rec_gene=loss_weights["lambda_rec_gene"],
         lambda_rec_state=loss_weights["lambda_rec_state"],
         lambda_clust=loss_weights["lambda_clust"],
         lambda_state_entropy=loss_weights["lambda_state_entropy"],
@@ -207,6 +208,10 @@ def alternative_idea_compute_mapping(
         "total-weighted": [],
         "rec_spot": {
             "weight": loss_weights["lambda_rec_spot"],
+            "values": []
+        },
+        "rec_gene": {
+            "weight": loss_weights["lambda_rec_gene"],
             "values": []
         },
         "rec_state": {
@@ -284,6 +289,7 @@ def alternative_idea_compute_mapping(
         # Collect loss values
         losses["total-weighted"].append(to_scalar(total_loss))
         losses["rec_spot"]["values"].append(to_scalar(loss_dict.get("rec_spot")))
+        losses["rec_gene"]["values"].append(to_scalar(loss_dict.get("rec_gene")))
         losses["rec_state"]["values"].append(to_scalar(loss_dict.get("rec_state")))
         losses["clust"]["values"].append(to_scalar(loss_dict.get("clust")))
         losses["state_entropy"]["values"].append(to_scalar(loss_dict.get("state_entropy")))

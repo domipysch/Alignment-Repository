@@ -86,7 +86,7 @@ def graph_type_from_config(graph_cfg: Dict) -> SpatialGraphType:
 def dump_loss_logs(losses, config_path) -> dict:
 
     losses_after_last_epoch = {}
-    for comp in ("rec_spot", "rec_state", "clust", "state_entropy", "spot_entropy"):
+    for comp in ("rec_spot", "rec_gene", "rec_state", "clust", "state_entropy", "spot_entropy"):
         comp_vals = losses.get(comp, {})
         val = None
         if isinstance(comp_vals, dict):
@@ -107,7 +107,6 @@ def dump_loss_logs(losses, config_path) -> dict:
     return losses_after_last_epoch
 
 
-
 def create_loss_plots(losses, loss_dir):
 
     loss_dir.mkdir(parents=True, exist_ok=True)
@@ -118,6 +117,7 @@ def create_loss_plots(losses, loss_dir):
     epochs = list(range(len(losses["total-weighted"])))
     plt.plot(epochs, losses["total-weighted"], label="total-weighted", linewidth=2, color="black")
     plt.plot(epochs, list(v * losses["rec_spot"]["weight"] for v in losses["rec_spot"]["values"]), label="rec_spot-weighted")
+    plt.plot(epochs, list(v * losses["rec_gene"]["weight"] for v in losses["rec_gene"]["values"]), label="rec_gene-weighted")
     plt.plot(epochs, list(v * losses["rec_state"]["weight"] for v in losses["rec_state"]["values"]), label="rec_state-weighted")
     plt.plot(epochs, list(v * losses["clust"]["weight"] for v in losses["clust"]["values"]), label="clust-weighted")
     plt.plot(epochs, list(v * losses["state_entropy"]["weight"] for v in losses["state_entropy"]["values"]), label="state_entropy-weighted")
@@ -135,7 +135,7 @@ def create_loss_plots(losses, loss_dir):
     num_epochs = len(losses.get("total-weighted", []))
 
     # Components (order for plotting)
-    components = ("rec_spot", "rec_state", "clust", "state_entropy", "spot_entropy")
+    components = ("rec_spot", "rec_gene", "rec_state", "clust", "state_entropy", "spot_entropy")
 
     # Ensure epochs list is available
     epochs = list(range(num_epochs))

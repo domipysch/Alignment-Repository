@@ -9,6 +9,7 @@ class AlternativeIdeaLoss(nn.Module):
     def __init__(
         self,
         lambda_rec_spot: float = 1.0,
+        lambda_rec_gene: float = 0.0,
         lambda_rec_state: float = 1.0,
         lambda_clust: float = 1.0,
         lambda_state_entropy: float = 1.0,
@@ -21,6 +22,7 @@ class AlternativeIdeaLoss(nn.Module):
     ):
         super(AlternativeIdeaLoss, self).__init__()
         self.lambda_rec_spot = lambda_rec_spot
+        self.lambda_rec_gene = lambda_rec_gene
         self.lambda_rec_state = lambda_rec_state
         self.lambda_clust = lambda_clust
         self.lambda_state_entropy = lambda_state_entropy
@@ -101,6 +103,40 @@ class AlternativeIdeaLoss(nn.Module):
         loss_per_spot = torch.clamp(1.0 - cosine_sim, min=0.0)
 
         return torch.mean(loss_per_spot)
+
+    def get_rec_gene_loss(self, A: Tensor, B: Tensor, X_shared: Tensor, Z_shared: Tensor) -> Tensor:
+        """
+        Gene-wise scale-invariant reconstruction loss (Z' vs Z on shared genes).
+
+        Equivalent to get_rec_spot_loss but the cosine similarity is computed
+        per gene (over the spots dimension) instead of per spot (over the genes
+        dimension).
+
+        Args:
+            A: Alignment matrix (S x C)
+            B: Cell-to-state matrix (C x K)
+            X_shared: scRNA-seq reference restricted to shared genes (C x G_shared)
+            Z_shared: Empirical ST data restricted to shared genes (S x G_shared)
+        """
+        # 1. Compute Z_prime (same as in get_rec_spot_loss)
+        if self.use_cm:
+            C = torch.matmul(A, B)  # (S x K)
+            B_normalized = B / (torch.sum(B, dim=0) + self.eps)  # (C x K), col-normalised
+            M = torch.matmul(B_normalized.t(), X_shared)  # (K x G_shared)
+            Z_prime = torch.matmul(C, M)  # (S x G_shared)
+        else:
+            Z_prime = torch.matmul(A, X_shared)  # (S x G_shared)
+
+        # 2. Cosine similarity gene-wise: sum over spots (dim=0)
+        dot_product = torch.sum(Z_shared * Z_prime, dim=0)   # (G_shared,)
+        norm_Z = torch.norm(Z_shared, p=2, dim=0)             # (G_shared,)
+        norm_Z_prime = torch.norm(Z_prime, p=2, dim=0)        # (G_shared,)
+
+        cosine_sim = dot_product / (norm_Z * norm_Z_prime + self.eps)
+        cosine_sim = torch.clamp(cosine_sim, -1.0, 1.0)
+
+        loss_per_gene = torch.clamp(1.0 - cosine_sim, min=0.0)
+        return torch.mean(loss_per_gene)
 
     def get_rec_state_loss(self, M_reconstructed: Tensor, A: Tensor, B: Tensor, X_sc: Tensor) -> Tensor:
         """
@@ -229,6 +265,7 @@ class AlternativeIdeaLoss(nn.Module):
         """
         # 1. Individual terms (unweighted)
         l_rec_spot = self.get_rec_spot_loss(A, B, X_shared, Z_shared)
+        l_rec_gene = self.get_rec_gene_loss(A, B, X_shared, Z_shared)
         l_rec_state = self.get_rec_state_loss(M_rec, A, B, X)
         l_clust = self.get_clust_loss(A, h, B, F)
         l_state_entropy = self.get_state_entropy_loss(B)
@@ -280,6 +317,7 @@ class AlternativeIdeaLoss(nn.Module):
         # 3. Weighted total (use normalized versions for rec_state and clust when available)
         total_loss = (
             self.lambda_rec_spot * l_rec_spot +
+            self.lambda_rec_gene * l_rec_gene +
             self.lambda_rec_state * l_rec_state_norm +
             self.lambda_clust * l_clust_norm +
             self.lambda_state_entropy * l_state_entropy +
@@ -290,6 +328,7 @@ class AlternativeIdeaLoss(nn.Module):
         return {
             "loss": total_loss,
             "rec_spot": l_rec_spot,
+            "rec_gene": l_rec_gene,
             "rec_state": l_rec_state_norm,
             "clust": l_clust_norm,
             "state_entropy": l_state_entropy,

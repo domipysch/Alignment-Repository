@@ -31,7 +31,9 @@ training:
     - true
 loss_weights:
   - lambda_rec_spot: 1.0
+    lambda_rec_gene: 0
     lambda_rec_state: 0
     lambda_clust: 0
     lambda_state_entropy: 0.1
-    lambda_spot_entropy: 0.1
+    lambda_spot_entropy: 0.08
+

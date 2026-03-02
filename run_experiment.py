@@ -15,10 +15,16 @@ import alternative_idea.main as alternative_idea
 import metrics.run_all_metrics as run_all_metrics
 import metrics.run_all_shared_boxplots as run_all_shared_boxplots
 import metrics.run_all_permutation_boxplots as run_all_permutation_boxplots
+
 logger = logging.getLogger(__name__)
 
 
-def create_shared_boxplots(ids: list[str], metrics_folder: Path, output_folder: Path, run_permutation_tests: bool = False):
+def create_shared_boxplots(
+    ids: list[str],
+    metrics_folder: Path,
+    output_folder: Path,
+    run_permutation_tests: bool = False,
+):
 
     # Run shared metrics
     run_all_shared_boxplots.main(
@@ -36,7 +42,15 @@ def create_shared_boxplots(ids: list[str], metrics_folder: Path, output_folder: 
         )
 
 
-def run_config(dataset: Path, run_config_path: Path, save_result_path: Optional[Path], save_mapping_path: Optional[Path], metrics_folder: Path, metrics_folder_det: Path, run_permutation_tests: bool = False) -> dict:
+def run_config(
+    dataset: Path,
+    run_config_path: Path,
+    save_result_path: Optional[Path],
+    save_mapping_path: Optional[Path],
+    metrics_folder: Path,
+    metrics_folder_det: Path,
+    run_permutation_tests: bool = False,
+) -> dict:
     # Determine verbose flag from current logger level
     verbose_flag = logger.getEffectiveLevel() == logging.DEBUG
 
@@ -56,7 +70,7 @@ def run_config(dataset: Path, run_config_path: Path, save_result_path: Optional[
         dataset,
         metrics_folder,
         result_gep=predicted_gep,
-        run_permutation_tests=run_permutation_tests
+        run_permutation_tests=run_permutation_tests,
     )
 
     # Run individual metrics (deterministic) if applicable
@@ -65,13 +79,20 @@ def run_config(dataset: Path, run_config_path: Path, save_result_path: Optional[
             dataset,
             metrics_folder_det,
             result_gep=predicted_gep_det,
-            run_permutation_tests=run_permutation_tests
+            run_permutation_tests=run_permutation_tests,
         )
 
     return losses_after_last_epoch
 
 
-def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_folder: Path, save_result: bool = False, run_permutation_tests: bool = False):
+def main(
+    dataset: Path,
+    experiment_config: Path,
+    result_folder: Path,
+    metric_folder: Path,
+    save_result: bool = False,
+    run_permutation_tests: bool = False,
+):
 
     if not experiment_config.exists():
         raise FileNotFoundError(f"experiment_config not found: {experiment_config}")
@@ -131,7 +152,9 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
     # Ensure no leaf has empty list
     for path, vals in leaves:
         if not isinstance(vals, list) or len(vals) == 0:
-            raise ValueError(f"Configuration entry {'.'.join(path)} must be a non-empty list or scalar.")
+            raise ValueError(
+                f"Configuration entry {'.'.join(path)} must be a non-empty list or scalar."
+            )
 
     # Prepare ordered lists for product
     paths = [p for p, v in leaves]
@@ -141,7 +164,9 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
     for v in lists:
         total_runs *= len(v)
 
-    logger.info(f"Experiment config loaded from {experiment_config}. Total runs to execute: {total_runs}")
+    logger.info(
+        f"Experiment config loaded from {experiment_config}. Total runs to execute: {total_runs}"
+    )
 
     if os.path.exists(result_folder):
         shutil.rmtree(result_folder)
@@ -170,11 +195,26 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
         cur[path[-1]] = value
 
     run_id = 0
-    with open(summary_path, "a", newline='') as summary_file:
+    with open(summary_path, "a", newline="") as summary_file:
 
         writer = csv.writer(summary_file)
         if write_header:
-            writer.writerow(["id", "config_path", "output_path", "status", "duration_seconds", "error_message", "L1", "L2", "L3", "L4", "L5", "L6"])
+            writer.writerow(
+                [
+                    "id",
+                    "config_path",
+                    "output_path",
+                    "status",
+                    "duration_seconds",
+                    "error_message",
+                    "L1",
+                    "L2",
+                    "L3",
+                    "L4",
+                    "L5",
+                    "L6",
+                ]
+            )
 
         for combo in combo_iter:
             # Build run-specific config
@@ -195,13 +235,15 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
 
             # if mode is 'deterministic', then also create a folder "<run_id>_det"
             metric_dir_det = None
-            if cfg_copy['mapping']['deterministic']:
+            if cfg_copy["mapping"]["deterministic"]:
                 metric_dir_det = metric_folder / f"{run_id}_det"
                 metric_dir_det.mkdir(parents=True, exist_ok=False)
 
             start = time.time()
             try:
-                logger.info(f"Starting run {run_id}/{total_runs - 1} -> writing to {run_dir}")
+                logger.info(
+                    f"Starting run {run_id}/{total_runs - 1} -> writing to {run_dir}"
+                )
                 losses_after_last_epoch = run_config(
                     dataset,
                     run_config_path,
@@ -209,25 +251,47 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
                     (run_dir / "mapping.csv") if save_result else None,
                     metric_dir,
                     metric_dir_det if metric_dir_det is not None else "",
-                    run_permutation_tests=run_permutation_tests
+                    run_permutation_tests=run_permutation_tests,
                 )
                 duration = time.time() - start
-                writer.writerow([
-                    run_id, str(run_config_path), str(result_path), "ok", f"{duration:.3f}", "",
-                    losses_after_last_epoch["rec_spot"],
-                    losses_after_last_epoch["rec_gene"],
-                    losses_after_last_epoch["rec_state"],
-                    losses_after_last_epoch["clust"],
-                    losses_after_last_epoch["state_entropy"],
-                    losses_after_last_epoch["spot_entropy"],
-                ])
+                writer.writerow(
+                    [
+                        run_id,
+                        str(run_config_path),
+                        str(result_path),
+                        "ok",
+                        f"{duration:.3f}",
+                        "",
+                        losses_after_last_epoch["rec_spot"],
+                        losses_after_last_epoch["rec_gene"],
+                        losses_after_last_epoch["rec_state"],
+                        losses_after_last_epoch["clust"],
+                        losses_after_last_epoch["state_entropy"],
+                        losses_after_last_epoch["spot_entropy"],
+                    ]
+                )
                 logger.info(f"Run {run_id} completed in {duration:.2f}s")
 
             except Exception as e:
                 duration = time.time() - start
                 tb = traceback.format_exc()
                 logger.error(f"Run {run_id} failed after {duration:.2f}s: {e}\n{tb}")
-                writer.writerow([run_id, str(run_config_path), str(result_path), "error", f"{duration:.3f}", str(e), "", "", "", "", "", ""])
+                writer.writerow(
+                    [
+                        run_id,
+                        str(run_config_path),
+                        str(result_path),
+                        "error",
+                        f"{duration:.3f}",
+                        str(e),
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                    ]
+                )
                 # Stop on first error as requested
                 raise
 
@@ -237,33 +301,60 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
     metric_folder_shared = metric_folder / "shared"
     metric_folder_shared.mkdir(parents=True, exist_ok=False)
     run_names = list(map(str, range(run_id)))
-    if base_cfg['mapping']['deterministic']:
+    if base_cfg["mapping"]["deterministic"]:
         run_names += list(f"{runid}_det" for runid in range(run_id))
     create_shared_boxplots(
         run_names,
         metric_folder,
         metric_folder_shared,
-        run_permutation_tests=run_permutation_tests
+        run_permutation_tests=run_permutation_tests,
     )
 
 
 if __name__ == "__main__":
 
     # 1. Parse Arguments
-    parser = argparse.ArgumentParser(description="Run AlternativeIdea alignment on a dataset folder")
-    parser.add_argument('-d', '--dataset', type=Path, help='Path to dataset folder')
-    parser.add_argument('-c', '--experiment_config', type=Path, help='Path to config.yaml')
-    parser.add_argument('-o', '--result_folder', type=Path, help='Path where to store results to')
-    parser.add_argument('-s', '--save_result', action='store_true', help='Whether to save the predicte Z prime to disk')
-    parser.add_argument('-m', '--metric_folder', type=Path, help='Path where to store metrics to')
-    parser.add_argument('--logging', dest='logging', choices=['normal', 'verbose'], default='normal',
-                        help="Logging verbosity. Use 'verbose' for more logs.")
-    parser.add_argument('--run_permutation_tests', dest='run_permutation_tests', action='store_true', help="Whether to run permutation tests or not.")
+    parser = argparse.ArgumentParser(
+        description="Run AlternativeIdea alignment on a dataset folder"
+    )
+    parser.add_argument("-d", "--dataset", type=Path, help="Path to dataset folder")
+    parser.add_argument(
+        "-c", "--experiment_config", type=Path, help="Path to config.yaml"
+    )
+    parser.add_argument(
+        "-o", "--result_folder", type=Path, help="Path where to store results to"
+    )
+    parser.add_argument(
+        "-s",
+        "--save_result",
+        action="store_true",
+        help="Whether to save the predicte Z prime to disk",
+    )
+    parser.add_argument(
+        "-m", "--metric_folder", type=Path, help="Path where to store metrics to"
+    )
+    parser.add_argument(
+        "--logging",
+        dest="logging",
+        choices=["normal", "verbose"],
+        default="normal",
+        help="Logging verbosity. Use 'verbose' for more logs.",
+    )
+    parser.add_argument(
+        "--run_permutation_tests",
+        dest="run_permutation_tests",
+        action="store_true",
+        help="Whether to run permutation tests or not.",
+    )
     args = parser.parse_args()
 
     # 2. Configure logging based on argument
     level = logging.DEBUG if args.logging == "verbose" else logging.INFO
-    logging.basicConfig(stream=sys.stdout, level=level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        stream=sys.stdout,
+        level=level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
     logger.setLevel(level)
 
     # 3. Run
@@ -273,5 +364,5 @@ if __name__ == "__main__":
         args.result_folder,
         args.metric_folder,
         save_result=args.save_result,
-        run_permutation_tests=args.run_permutation_tests
+        run_permutation_tests=args.run_permutation_tests,
     )

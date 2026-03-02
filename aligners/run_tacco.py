@@ -3,9 +3,7 @@ import tacco as tc
 import pandas as pd
 import numpy as np
 import logging
-
 from anndata import AnnData
-
 from utils import load_sc_adata, load_st_adata, fmt_nonzero_4
 import argparse
 from scipy.sparse import issparse
@@ -55,7 +53,9 @@ def tacco_align_data(
         Xsc = adata_sc.X.toarray()
     else:
         Xsc = np.array(adata_sc.X)
-    sc_obs = pd.DataFrame(Xsc, index=adata_sc.obs_names, columns=adata_sc.var_names)  # C x G
+    sc_obs = pd.DataFrame(
+        Xsc, index=adata_sc.obs_names, columns=adata_sc.var_names
+    )  # C x G
     mean_expr = sc_obs.groupby(adata_sc.obs["cell_subclass"]).mean()  # T x G
 
     # Convert mean -> gene profile p_tg (rows sum to 1)
@@ -66,7 +66,9 @@ def tacco_align_data(
     logging.info("Shape p_tg: %s", p_tg.shape)
 
     # Fractions from TACCO (ensure row sums ~1), S x T
-    fractions = pd.DataFrame(adata_st.obsm["align_result"], index=adata_st.obs_names, columns=mean_expr.index)
+    fractions = pd.DataFrame(
+        adata_st.obsm["align_result"], index=adata_st.obs_names, columns=mean_expr.index
+    )
     logging.info("Shape fractions: %s", fractions)
 
     if deterministic_mapping:
@@ -77,7 +79,9 @@ def tacco_align_data(
         # build one-hot values and wrap back to DataFrame
         one_hot_vals = np.zeros_like(fractions.values, dtype=float)
         one_hot_vals[np.arange(len(fractions)), col_idx] = 1.0
-        one_hot = pd.DataFrame(one_hot_vals, index=fractions.index, columns=fractions.columns, dtype=float)
+        one_hot = pd.DataFrame(
+            one_hot_vals, index=fractions.index, columns=fractions.columns, dtype=float
+        )
         # replace fractions with the deterministic one-hot mapping
         fractions = one_hot  # S x T
 
@@ -97,7 +101,9 @@ def tacco_align_data(
     # - Rows: Genes
     # - Columns: Spots
     # - Top left cell = "GEP"
-    recon_df = pd.DataFrame(recon.T.astype(np.float32), index=adata_sc.var_names, columns=adata_st.obs_names)
+    recon_df = pd.DataFrame(
+        recon.T.astype(np.float32), index=adata_sc.var_names, columns=adata_st.obs_names
+    )
     logging.info("Shape recon_df: %s", recon_df.shape)
     df_formatted = recon_df.map(fmt_nonzero_4)
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -116,29 +122,40 @@ if __name__ == "__main__":
     """
 
     # Configure basic logging
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     logger = logging.getLogger(__name__)
 
-    parser = argparse.ArgumentParser(description="Run TACCO alignment on a dataset folder")
-    parser.add_argument('-d', '--dataset', dest='dataset', type=str,
-                        help='Path to dataset folder (default: development workspace mouse cortex)')
+    parser = argparse.ArgumentParser(
+        description="Run TACCO alignment on a dataset folder"
+    )
+    parser.add_argument(
+        "-d",
+        "--dataset",
+        dest="dataset",
+        type=str,
+        help="Path to dataset folder (default: development workspace mouse cortex)",
+    )
     args = parser.parse_args()
 
     tacco_align_data(
         args.dataset,
         deterministic_mapping=True,
         cell_type_key="cellID",
-        output_path=os.path.join(args.dataset, "results_cell", "tacco_GEP.csv")
+        output_path=os.path.join(args.dataset, "results_cell", "tacco_GEP.csv"),
     )
     tacco_align_data(
         args.dataset,
         deterministic_mapping=True,
         cell_type_key="cellType",
-        output_path=os.path.join(args.dataset, "results_cellType", "tacco_GEP.csv")
+        output_path=os.path.join(args.dataset, "results_cellType", "tacco_GEP.csv"),
     )
     tacco_align_data(
         args.dataset,
         deterministic_mapping=True,
         cell_type_key="cellTypeMinor",
-        output_path=os.path.join(args.dataset, "results_cellTypeMinor", "tacco_GEP.csv")
+        output_path=os.path.join(
+            args.dataset, "results_cellTypeMinor", "tacco_GEP.csv"
+        ),
     )

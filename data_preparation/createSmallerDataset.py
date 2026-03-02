@@ -8,8 +8,11 @@ from scipy.sparse import issparse
 def load_sc_adata(dataset_folder: str, cell_type_keys: list[str]) -> ad.AnnData:
     """
     Load single-cell data from dataset folder into an AnnData object.
+
     Args:
-        dataset_folder: Absolute path to dataset folder
+        dataset_folder: Absolute path to dataset folder.
+        cell_type_keys: List of column names in scData_Cells.csv to load as cell annotations.
+
     Returns:
         ad.AnnData: Single-cell AnnData object (C x G)
     """
@@ -27,8 +30,10 @@ def load_sc_adata(dataset_folder: str, cell_type_keys: list[str]) -> ad.AnnData:
 def load_st_adata(dataset_folder: str) -> ad.AnnData:
     """
     Load ST data from dataset folder into an AnnData object.
+
     Args:
-        dataset_folder: Absolute path to dataset folder
+        dataset_folder: Absolute path to dataset folder.
+
     Returns:
         ad.AnnData: ST AnnData object (S x G)
     """
@@ -41,8 +46,12 @@ def load_st_adata(dataset_folder: str) -> ad.AnnData:
     return adata_st
 
 
-
 if __name__ == "__main__":
+    """
+    Creates a smaller subset dataset from a full scRNA-seq + ST dataset.
+    Subsets cells, genes, and spots to configurable target counts, ensuring that
+    selected cells and spots each express at least one shared gene.
+    """
 
     dataset_from = "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_Datasets/03_MouseSSP"
     dataset_to = "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_Datasets/03_MouseSSP_Large"
@@ -68,7 +77,9 @@ if __name__ == "__main__":
     target_nr_st_genes = 33
     target_nr_shared_genes = 33
 
-    rng = np.random.default_rng()  # Zufallszahlengenerator für reproduzierbares Sampling (ohne festen Seed)
+    rng: np.random.Generator = (
+        np.random.default_rng()
+    )  # no fixed seed — sampling is non-deterministic across runs
 
     """ Create mini dataset from full scRNA + ST dataset """
 
@@ -82,14 +93,17 @@ if __name__ == "__main__":
     stNonSharedGenes = stData.var_names.difference(sharedGenes)
 
     # 3. Create list of genes to keep (of length target_nr, half shared, half non-shared)
-    scGenesToKeep = list(sharedGenes[:target_nr_shared_genes]) + list(scNonSharedGenes[:target_nr_sc_genes - target_nr_shared_genes])
+    scGenesToKeep = list(sharedGenes[:target_nr_shared_genes]) + list(
+        scNonSharedGenes[: target_nr_sc_genes - target_nr_shared_genes]
+    )
     if len(stNonSharedGenes) >= target_nr_shared_genes:
-        stGenesToKeep = list(sharedGenes[:target_nr_shared_genes]) + list(stNonSharedGenes[:target_nr_st_genes - target_nr_shared_genes])
+        stGenesToKeep = list(sharedGenes[:target_nr_shared_genes]) + list(
+            stNonSharedGenes[: target_nr_st_genes - target_nr_shared_genes]
+        )
     else:
         stGenesToKeep = list(sharedGenes[:target_nr_st_genes])
 
     # 4. Select cells from scRNA data that contain expression for at least one shared gene each (at random, target_nr many)
-    # robust handling für dichte und sparse .X
     sc_mat = scData[:, sharedGenes[:target_nr_shared_genes]].X
     if issparse(sc_mat):
         sc_mask = np.asarray(sc_mat.getnnz(axis=1) > 0).reshape(-1)
@@ -130,7 +144,6 @@ if __name__ == "__main__":
     # 3. Save stData_Spots.csv
     stSpots_df = pd.DataFrame(index=stData_mini.obs_names)
     spatial = np.asarray(stData_mini.obsm["spatial"])
-    # falls (2, n_spots) statt (n_spots, 2), transponieren
     if spatial.shape == (2, stData_mini.n_obs):
         spatial = spatial.T
     stSpots_df[["cArray0", "cArray1"]] = spatial

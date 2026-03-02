@@ -1,14 +1,27 @@
+"""
+Converts a TSV file to a CSV file by replacing tab delimiters with commas.
+"""
+
 import csv
 import os
 import sys
 
+
 def tsv_to_csv(input_path: str, output_path: str) -> None:
+    """
+    Read a tab-separated file and write it as a comma-separated file.
+
+    Args:
+        input_path: Path to the input .tsv file.
+        output_path: Path where the output .csv file will be written.
+    """
     with open(input_path, newline="", encoding="utf-8") as fin:
         reader = csv.reader(fin, delimiter="\t")
         with open(output_path, "w", newline="", encoding="utf-8") as fout:
-            writer = csv.writer(fout)  # Standard-Delimiter ist Komma
+            writer = csv.writer(fout)  # default delimiter is comma
             for row in reader:
                 writer.writerow(row)
+
 
 if __name__ == "__main__":
 
@@ -21,7 +34,6 @@ if __name__ == "__main__":
     try:
         tsv_to_csv(input_path, output_path)
     except Exception as e:
-        print(f"Fehler beim Konvertieren: {e}", file=sys.stderr)
+        print(f"Error converting file: {e}", file=sys.stderr)
 
-    print(f"Erfolgreich konvertiert: {output_path}")
-
+    print(f"Successfully converted: {output_path}")

@@ -1,10 +1,13 @@
 from anndata import AnnData
 import torch
 import logging
+
 logger = logging.getLogger(__name__)
 
 
-def prepare_tensors_from_input(adata_sc: AnnData, adata_st: AnnData, device) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+def prepare_tensors_from_input(
+    adata_sc: AnnData, adata_st: AnnData, device
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Convert AnnData objects to PyTorch tensors for single-cell and spatial transcriptomics data.
 
@@ -48,8 +51,16 @@ def prepare_tensors_from_input(adata_sc: AnnData, adata_st: AnnData, device) -> 
     adata_sc_shared = adata_sc[:, shared_genes].copy()
     adata_st_shared = adata_st[:, shared_genes].copy()
 
-    X_shared_raw = adata_sc_shared.X.toarray() if hasattr(adata_sc_shared.X, "toarray") else adata_sc_shared.X
-    Z_shared_raw = adata_st_shared.X.toarray() if hasattr(adata_st_shared.X, "toarray") else adata_st_shared.X
+    X_shared_raw = (
+        adata_sc_shared.X.toarray()
+        if hasattr(adata_sc_shared.X, "toarray")
+        else adata_sc_shared.X
+    )
+    Z_shared_raw = (
+        adata_st_shared.X.toarray()
+        if hasattr(adata_st_shared.X, "toarray")
+        else adata_st_shared.X
+    )
 
     # 4. Convert to Tensors and move to Device (MPS/CPU)
     logger.debug("Convert to tensors")

@@ -3,6 +3,7 @@ from torch import Tensor
 import torch.nn as nn
 from torch_geometric.nn import GCNConv
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,10 +56,12 @@ class AlternativeIdeaModel(nn.Module):
             nn.Linear(d, dec_hidden_dim),
             nn.ReLU(),
             nn.Dropout(dropout_rate_decoder),
-            nn.Linear(dec_hidden_dim, g_sc)
+            nn.Linear(dec_hidden_dim, g_sc),
         )
 
-    def forward(self, z: Tensor, edge_index: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
+    def forward(
+        self, z: Tensor, edge_index: Tensor
+    ) -> tuple[Tensor, Tensor, Tensor, Tensor, Tensor]:
         """
         Args:
             z: Spatial gene features

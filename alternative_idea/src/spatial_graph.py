@@ -4,6 +4,7 @@ from enum import Enum, auto
 from scipy.spatial import KDTree, Delaunay
 from torch import Tensor
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -35,7 +36,9 @@ def build_spatial_graph(
         edge_index: Tensor of shape (2, E) in PyTorch Geometric format.
     """
     logger.debug(f"Build spatial graph of type {method}")
-    assert adata_st.obsm["spatial"] is not None, "No spatial coordinates found in adata_st.obsm['spatial']"
+    assert (
+        adata_st.obsm["spatial"] is not None
+    ), "No spatial coordinates found in adata_st.obsm['spatial']"
     coords = adata_st.obsm["spatial"]
     num_spots = coords.shape[0]
     tree = KDTree(coords)
@@ -86,10 +89,12 @@ def build_spatial_graph(
     else:
         raise ValueError(f"Unsupported SpatialGraphType: {method}")
 
-    assert len(edge_list)  > 0, "No edges were created in the spatial graph."
+    assert len(edge_list) > 0, "No edges were created in the spatial graph."
 
     # Convert to [2, E]
     # Ensure memory is contiguous for GCN efficiency
     edge_index = torch.tensor(edge_list, dtype=torch.long).t().contiguous()
-    logger.debug(f"Spatial graph has {edge_index.size(0)} nodes and {edge_index.size(1)} edges.")
+    logger.debug(
+        f"Spatial graph has {edge_index.size(0)} nodes and {edge_index.size(1)} edges."
+    )
     return edge_index.to(device)

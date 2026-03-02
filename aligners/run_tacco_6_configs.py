@@ -3,21 +3,29 @@ import argparse
 from pathlib import Path
 import os
 from run_tacco import tacco_align_data
-from MPA_Code.metrics import run_all_metrics, run_all_shared_boxplots
-
+from ..metrics import run_all_metrics, run_all_shared_boxplots
 
 if __name__ == "__main__":
     """
-    Run TACCO alignment on a prepared dataset at given folder.
+    Run TACCO alignment on a prepared dataset at given folder under 6 different settings:
+    (Probabilistic vs Deterministic mapping) x (Individual cells vs Major cell types vs Minor cell types)
     """
     # Configure basic logging
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     logger = logging.getLogger(__name__)
 
-    parser = argparse.ArgumentParser(description="Run TACCO alignment on a dataset folder")
-    parser.add_argument('-d', '--dataset', type=str, help='Path to dataset folder')
-    parser.add_argument('-o', '--output_folder', type=str, help='Path where to store result')
-    parser.add_argument('-m', '--metrics_folder', type=str, help='Path where to store metrics')
+    parser = argparse.ArgumentParser(
+        description="Run TACCO alignment on a dataset folder"
+    )
+    parser.add_argument("-d", "--dataset", type=str, help="Path to dataset folder")
+    parser.add_argument(
+        "-o", "--output_folder", type=str, help="Path where to store result"
+    )
+    parser.add_argument(
+        "-m", "--metrics_folder", type=str, help="Path where to store metrics"
+    )
     args = parser.parse_args()
 
     dataset_folder = Path(args.dataset)
@@ -33,7 +41,9 @@ if __name__ == "__main__":
 
     # If output folder not empty, error
     if any(output_folder.iterdir()):
-        logging.error(f"Output folder is not empty: {output_folder}. Please provide an empty folder.")
+        logging.error(
+            f"Output folder is not empty: {output_folder}. Please provide an empty folder."
+        )
         exit(1)
 
     # If metrics folder does not exist, create it
@@ -44,7 +54,9 @@ if __name__ == "__main__":
 
     # If metrics folder not empty, error
     if any(metrics_folder.iterdir()):
-        logging.error(f"metrics_folder is not empty: {metrics_folder}. Please provide an empty folder.")
+        logging.error(
+            f"metrics_folder is not empty: {metrics_folder}. Please provide an empty folder."
+        )
         exit(1)
 
     logging.info("Run 1/6: Prob, individual cells")
@@ -136,8 +148,12 @@ if __name__ == "__main__":
     metric_folder_shared = metrics_folder / "shared"
     metric_folder_shared.mkdir(parents=True, exist_ok=True)
     folders = [
-        "det_cells", "det_celltype_major", "det_celltype_minor",
-        "prob_cells", "prob_celltype_major", "prob_celltype_minor",
+        "det_cells",
+        "det_celltype_major",
+        "det_celltype_minor",
+        "prob_cells",
+        "prob_celltype_major",
+        "prob_celltype_minor",
     ]
     # Run shared metrics
     run_all_shared_boxplots.main(

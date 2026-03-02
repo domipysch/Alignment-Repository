@@ -38,7 +38,16 @@ def getis_ord_g_stat(x: np.ndarray, W: np.ndarray) -> np.ndarray:
 
 def _to_prob_vector(v: np.ndarray, eps: float = 1e-10) -> np.ndarray:
     """
-    Convert v to have sum=1
+    Normalize v to a probability vector (sum = 1), clipping values to at least eps.
+
+    If the input sums to zero, returns a uniform distribution.
+
+    Args:
+        v: Non-negative 1D array.
+        eps: Minimum value after normalization to avoid exact zeros.
+
+    Returns:
+        Normalized 1D array with sum ≈ 1.
     """
     assert v.ndim == 1, "Not 1D arrays"
     assert min(v) >= 0
@@ -53,6 +62,16 @@ def _to_prob_vector(v: np.ndarray, eps: float = 1e-10) -> np.ndarray:
 
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    """
+    Compute cosine similarity between two 1D arrays, clipped to [-1, 1].
+
+    Args:
+        a: First 1D array.
+        b: Second 1D array of the same shape.
+
+    Returns:
+        Cosine similarity in [-1, 1].
+    """
     assert a.shape == b.shape, "Not equal shape"
     assert a.ndim == 1, "Not 1D arrays"
     a = np.asarray(a).ravel().reshape(1, -1)
@@ -80,16 +99,36 @@ def mae_l1(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def canberra(a: np.ndarray, b: np.ndarray) -> float:
-    """Canberra distance (sum |x-y| / (|x|+|y|))"""
+    """
+    Canberra distance: sum(|a-b| / (|a|+|b|)), with 0/0 defined as 0.
+
+    Args:
+        a: First 1D array.
+        b: Second 1D array of the same shape.
+
+    Returns:
+        Canberra distance as a non-negative float.
+    """
     denom = np.abs(a) + np.abs(b)
     diff = np.abs(a - b)
-    with np.errstate(divide='ignore', invalid='ignore'):
+    with np.errstate(divide="ignore", invalid="ignore"):
         terms = np.where(denom == 0, 0.0, diff / denom)
     return float(np.sum(terms))
 
 
 def pearson_distance(a: np.ndarray, b: np.ndarray) -> float:
-    """1 - Pearson correlation coefficient (returns nan as float if undefined)"""
+    """
+    Pearson distance: 1 - |r|, where r is the Pearson correlation coefficient.
+
+    Returns nan if either array is all zeros or the correlation is undefined.
+
+    Args:
+        a: First 1D array.
+        b: Second 1D array of the same shape.
+
+    Returns:
+        Distance in [0, 1], or nan if undefined.
+    """
     if not np.any(a) or not np.any(b):
         return float(np.nan)
     try:
@@ -106,6 +145,17 @@ def bray_curtis_distance(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def aitchison_distance(a: np.ndarray, b: np.ndarray, eps: float = 1e-10) -> float:
+    """
+    Aitchison distance between two vectors in the simplex (via CLR transform).
+
+    Args:
+        a: First non-negative 1D array.
+        b: Second non-negative 1D array of the same shape.
+        eps: Small value passed to _to_prob_vector for numerical stability.
+
+    Returns:
+        Aitchison distance as a non-negative float.
+    """
     p, q = _to_prob_vector(a, eps=eps), _to_prob_vector(b, eps=eps)
     clr_p = np.log(p) - np.log(p).mean()
     clr_q = np.log(q) - np.log(q).mean()
@@ -113,31 +163,84 @@ def aitchison_distance(a: np.ndarray, b: np.ndarray, eps: float = 1e-10) -> floa
 
 
 def kl_divergence(a: np.ndarray, b: np.ndarray, eps: float = 1e-10) -> float:
+    """
+    KL divergence D_KL(p || q), treating inputs as unnormalized distributions.
+
+    Args:
+        a: First non-negative 1D array (treated as p).
+        b: Second non-negative 1D array (treated as q).
+        eps: Small value passed to _to_prob_vector for numerical stability.
+
+    Returns:
+        KL divergence as a non-negative float.
+    """
     p, q = _to_prob_vector(a, eps=eps), _to_prob_vector(b, eps=eps)
     return float(np.sum(p * np.log(p / q)))
 
 
 def jensen_shannon_distance(a: np.ndarray, b: np.ndarray, eps: float = 1e-10) -> float:
-    """Jensen–Shannon distance = sqrt(JS divergence)"""
+    """
+    Jensen-Shannon distance = sqrt(JS divergence) between two distributions.
+
+    Args:
+        a: First non-negative 1D array.
+        b: Second non-negative 1D array of the same shape.
+        eps: Small value passed to _to_prob_vector for numerical stability.
+
+    Returns:
+        JS distance in [0, 1].
+    """
     p, q = _to_prob_vector(a, eps=eps), _to_prob_vector(b, eps=eps)
     return jensenshannon(p, q)
 
 
 def hellinger_distance(a: np.ndarray, b: np.ndarray, eps: float = 1e-10) -> float:
-    """Hellinger distance between two probability distributions"""
+    """
+    Hellinger distance between two probability distributions.
+
+    Args:
+        a: First non-negative 1D array.
+        b: Second non-negative 1D array of the same shape.
+        eps: Small value passed to _to_prob_vector for numerical stability.
+
+    Returns:
+        Hellinger distance in [0, 1].
+    """
     p, q = _to_prob_vector(a, eps=eps), _to_prob_vector(b, eps=eps)
     return float((1.0 / np.sqrt(2.0)) * np.linalg.norm(np.sqrt(p) - np.sqrt(q)))
 
 
 def bhattacharyya_distance(a: np.ndarray, b: np.ndarray, eps: float = 1e-10) -> float:
-    """Bhattacharyya distance = -ln(sum sqrt(p*q))"""
+    """
+    Bhattacharyya coefficient: sum(sqrt(p * q)) over probability vectors.
+
+    Note: returns the Bhattacharyya coefficient (not -ln of it).
+
+    Args:
+        a: First non-negative 1D array.
+        b: Second non-negative 1D array of the same shape.
+        eps: Small value passed to _to_prob_vector for numerical stability.
+
+    Returns:
+        Bhattacharyya coefficient in [0, 1].
+    """
     p, q = _to_prob_vector(a, eps=eps), _to_prob_vector(b, eps=eps)
     bc = float(np.sum(np.sqrt(p * q)))
     return bc
 
 
 def total_variation(a: np.ndarray, b: np.ndarray, eps: float = 1e-10) -> float:
-    """Total variation distance = 0.5 * L1 over probability vectors"""
+    """
+    Total variation distance = 0.5 * L1 norm over normalized probability vectors.
+
+    Args:
+        a: First non-negative 1D array.
+        b: Second non-negative 1D array of the same shape.
+        eps: Small value passed to _to_prob_vector for numerical stability.
+
+    Returns:
+        Total variation distance in [0, 1].
+    """
     p, q = _to_prob_vector(a, eps=eps), _to_prob_vector(b, eps=eps)
     return float(0.5 * np.sum(np.abs(p - q)))
 
@@ -145,8 +248,16 @@ def total_variation(a: np.ndarray, b: np.ndarray, eps: float = 1e-10) -> float:
 def smape(a: np.ndarray, b: np.ndarray, eps: float = 1e-8) -> float:
     """
     Symmetric Mean Absolute Percentage Error between two 1D arrays.
-    sMAPE = mean( 2 * |a - b| / (|a| + |b|) )
-    Returns a float in [0, 2]. Small eps added to denominator for numerical stability.
+
+    sMAPE = mean( 2 * |a - b| / (|a| + |b| + eps) ), clipped to finite values.
+
+    Args:
+        a: First 1D array.
+        b: Second 1D array of the same shape.
+        eps: Small value added to the denominator to avoid division by zero.
+
+    Returns:
+        sMAPE value in [0, 2].
     """
     a = np.asarray(a, dtype=float).ravel()
     b = np.asarray(b, dtype=float).ravel()

@@ -3,6 +3,16 @@ import numpy as np
 
 
 def spearman_distance(a: np.ndarray, b: np.ndarray) -> float:
+    """
+    Compute the Spearman rank-order distance between two 1D arrays.
+
+    Args:
+        a: First 1D array.
+        b: Second 1D array of the same shape.
+
+    Returns:
+        Distance in [0, 1], or nan if undefined.
+    """
     assert a.shape == b.shape, "Not equal shape"
     assert a.ndim == 1, "Not 1D arrays"
     a_ranks = rankdata(a, method="average")
@@ -15,6 +25,16 @@ def spearman_distance(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def kendall_distance(a: np.ndarray, b: np.ndarray) -> float:
+    """
+    Compute the Kendall rank-order distance between two 1D arrays.
+
+    Args:
+        a: First 1D array.
+        b: Second 1D array of the same shape.
+
+    Returns:
+        Distance in [0, 1], or nan if undefined.
+    """
     assert a.shape == b.shape, "Not equal shape"
     assert a.ndim == 1, "Not 1D arrays"
     a_ranks = rankdata(a, method="average")

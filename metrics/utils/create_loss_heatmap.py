@@ -1,15 +1,5 @@
-"""Visualize how L4 (state_entropy) and L5 (spot_entropy) loss weights affect
-final loss values across a grid search experiment.
-
-Usage:
-    python -m MPA_Code.metrics.utils.create_loss_heatmap \
-        -r <results_folder> \
-        -o <output.png>
-"""
-
 import argparse
 from pathlib import Path
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -17,7 +7,15 @@ import yaml
 
 
 def load_summary(results_dir: Path) -> dict:
-    """Load summary.csv and return dict of run_id -> {L1, L4, L5}."""
+    """
+    Load summary.csv from a results directory.
+
+    Args:
+        results_dir: Path to the experiment results folder containing summary.csv.
+
+    Returns:
+        Dict mapping run_id (str) to a dict with keys 'L1', 'L4', 'L5' (floats).
+    """
     summary_path = results_dir / "summary.csv"
     df = pd.read_csv(summary_path)
     result = {}
@@ -32,7 +30,16 @@ def load_summary(results_dir: Path) -> dict:
 
 
 def load_hyperparams(results_dir: Path, run_id: str) -> tuple[float, float]:
-    """Load config.yml for a run and return (lambda_state_entropy, lambda_spot_entropy)."""
+    """
+    Load the entropy loss weights from config.yml for a single run.
+
+    Args:
+        results_dir: Path to the experiment results folder.
+        run_id: Subdirectory name of the run (e.g. '0', '1', ...).
+
+    Returns:
+        Tuple (lambda_state_entropy, lambda_spot_entropy) as floats.
+    """
     config_path = results_dir / run_id / "config.yml"
     with open(config_path) as f:
         config = yaml.safe_load(f)
@@ -41,7 +48,17 @@ def load_hyperparams(results_dir: Path, run_id: str) -> tuple[float, float]:
 
 
 def build_grid(results_dir: Path, summary: dict) -> tuple:
-    """Build sorted axis values and data matrices for L1, L4, L5."""
+    """
+    Build sorted axis values and 2D loss matrices for heatmap plotting.
+
+    Args:
+        results_dir: Path to the experiment results folder (used to read per-run configs).
+        summary: Dict mapping run_id to loss dict, as returned by load_summary.
+
+    Returns:
+        Tuple (state_axis, spot_axis, L1_grid, L4_grid, L5_grid), where the grids
+        are 2D arrays of shape (n_state_vals, n_spot_vals).
+    """
     state_vals = set()
     spot_vals = set()
     run_params = {}
@@ -76,7 +93,16 @@ def build_grid(results_dir: Path, summary: dict) -> tuple:
 
 
 def plot_heatmap(ax, matrix, state_axis, spot_axis, title):
-    """Plot a single heatmap panel with annotations and colorbar."""
+    """
+    Plot a single annotated heatmap panel with a colorbar.
+
+    Args:
+        ax: Matplotlib Axes to draw on.
+        matrix: 2D array of shape (n_spot_vals, n_state_vals) to visualize.
+        state_axis: Sorted list of lambda_state_entropy values (x-axis ticks).
+        spot_axis: Sorted list of lambda_spot_entropy values (y-axis ticks).
+        title: Title string for the subplot.
+    """
     im = ax.imshow(matrix, cmap="viridis", aspect="auto")
     plt.colorbar(im, ax=ax)
 
@@ -93,18 +119,27 @@ def plot_heatmap(ax, matrix, state_axis, spot_axis, title):
         for j in range(matrix.shape[1]):
             val = matrix[i, j]
             if not np.isnan(val):
-                ax.text(j, i, f"{val:.2f}", ha="center", va="center",
-                        fontsize=7, color="white")
+                ax.text(
+                    j,
+                    i,
+                    f"{val:.2f}",
+                    ha="center",
+                    va="center",
+                    fontsize=7,
+                    color="white",
+                )
 
 
 def main():
     parser = argparse.ArgumentParser(
         description="Plot loss heatmaps for grid search over L4/L5 weights."
     )
-    parser.add_argument("-r", "--results", required=True,
-                        help="Path to experiment results folder")
-    parser.add_argument("-o", "--output", required=True,
-                        help="Path to save the output PNG")
+    parser.add_argument(
+        "-r", "--results", required=True, help="Path to experiment results folder"
+    )
+    parser.add_argument(
+        "-o", "--output", required=True, help="Path to save the output PNG"
+    )
     args = parser.parse_args()
 
     results_dir = Path(args.results)
@@ -134,5 +169,13 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    """
+    Visualize state_entropy and spot_entropy loss weights effect
+    on final loss values across a grid search experiment.
 
+    Usage:
+        python -m MPA_Code.metrics.utils.create_loss_heatmap \
+            -r <results_folder> \
+            -o <output.png>
+    """
+    main()

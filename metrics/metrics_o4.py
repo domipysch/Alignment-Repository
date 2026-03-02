@@ -17,7 +17,8 @@ from .utils.distance_metrics import (
     bray_curtis_distance,
     hellinger_distance,
     total_variation,
-    bhattacharyya_distance, smape,
+    bhattacharyya_distance,
+    smape,
 )
 import matplotlib.pyplot as plt
 from matplotlib.collections import LineCollection
@@ -25,6 +26,7 @@ from matplotlib.colors import Normalize
 from matplotlib import cm
 import json
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,7 +45,7 @@ def create_spatial_graph(
     dataset_folder: Path,
     neighborhood_type: NeighborhoodType = NeighborhoodType.KNN,
     k: int = 4,
-    radius: float = None
+    radius: float = None,
 ) -> nx.Graph:
     """
     Read stData_Spots.csv and build a networkx.Graph with one node per spot (node attribute 'pos').
@@ -127,8 +129,10 @@ def create_spatial_graph(
         for simplex in tri.simplices:
             # add edges between each pair of simplex vertices
             for a, b in ((0, 1), (0, 2), (1, 2)):
-                i = int(simplex[a]); j = int(simplex[b])
-                sid_i = spot_ids[i]; sid_j = spot_ids[j]
+                i = int(simplex[a])
+                j = int(simplex[b])
+                sid_i = spot_ids[i]
+                sid_j = spot_ids[j]
                 if not G.has_edge(sid_i, sid_j):
                     dist = float(np.linalg.norm(coords[i] - coords[j]))
                     G.add_edge(sid_i, sid_j, weight=dist)
@@ -146,12 +150,13 @@ def create_spatial_graph(
         candidate_edges = set()
         for simplex in tri.simplices:
             verts = [int(v) for v in simplex]
-            for a, b in ((0,1),(0,2),(1,2)):
-                i = verts[a]; j = verts[b]
+            for a, b in ((0, 1), (0, 2), (1, 2)):
+                i = verts[a]
+                j = verts[b]
                 if i == j:
                     continue
-                a_idx, b_idx = min(i,j), max(i,j)
-                candidate_edges.add( (a_idx, b_idx) )
+                a_idx, b_idx = min(i, j), max(i, j)
+                candidate_edges.add((a_idx, b_idx))
         eps = 1e-10
         for i, j in candidate_edges:
             pij = np.linalg.norm(coords[i] - coords[j])
@@ -163,7 +168,7 @@ def create_spatial_graph(
             mask[i] = False
             mask[j] = False
             # if any k exists with max(d_i[k], d_j[k]) < pij then (i,j) is NOT in RNG
-            if np.any( np.maximum(d_i[mask], d_j[mask]) < (pij - eps) ):
+            if np.any(np.maximum(d_i[mask], d_j[mask]) < (pij - eps)):
                 continue
             sid_i, sid_j = spot_ids[i], spot_ids[j]
             if not G.has_edge(sid_i, sid_j):
@@ -180,7 +185,8 @@ def create_spatial_graph(
                     continue
                 if j < i:
                     continue
-                sid_i = spot_ids[i]; sid_j = spot_ids[j]
+                sid_i = spot_ids[i]
+                sid_j = spot_ids[j]
                 if not G.has_edge(sid_i, sid_j):
                     dist = float(np.linalg.norm(coords[i] - coords[j]))
                     G.add_edge(sid_i, sid_j, weight=dist)
@@ -196,8 +202,7 @@ def create_spatial_graph(
 
 # In Tangram Refined: L_
 def binary_adjacency_matrix_from_graph(
-    dataset_folder: Path,
-    G: nx.Graph
+    dataset_folder: Path, G: nx.Graph
 ) -> pd.DataFrame:
     """
     Create a binary (0/1) adjacency matrix as a pandas.DataFrame from the given networkx Graph G.
@@ -222,7 +227,9 @@ def binary_adjacency_matrix_from_graph(
     for u, v in G.edges():
         su, sv = str(u), str(v)
         if su not in idx_map or sv not in idx_map:
-            warnings.warn(f"Kante ({su},{sv}) weist auf Spot-ID, die nicht in stData_Spots.csv enthalten ist. Ignoriere.")
+            warnings.warn(
+                f"Kante ({su},{sv}) weist auf Spot-ID, die nicht in stData_Spots.csv enthalten ist. Ignoriere."
+            )
             continue
         i = idx_map[su]
         j = idx_map[sv]
@@ -230,7 +237,9 @@ def binary_adjacency_matrix_from_graph(
         A[j, i] = 1
 
     # Assert diagonal entries are already zero (no unexpected self-loops)
-    assert np.all(np.diag(A) == 0), f"Adjazenz-Matrix enthält nicht-null Diagonaleinträge"
+    assert np.all(
+        np.diag(A) == 0
+    ), f"Adjazenz-Matrix enthält nicht-null Diagonaleinträge"
 
     # Return as pandas DataFrame with spot ids as index/columns
     return pd.DataFrame(A, index=spot_ids, columns=spot_ids)
@@ -241,7 +250,7 @@ def locality_matrix(
     dataset_folder: Path,
     method: str = "rbf",  # "rbf", "linear", "inverse"
     sigma: float = None,  # used for 'rbf'; if None inferred from data
-    dtype=np.float32
+    dtype=np.float32,
 ) -> pd.DataFrame:
     """
     Create a symmetric neighborhood/similarity matrix as a pandas.DataFrame
@@ -287,10 +296,10 @@ def locality_matrix(
                 if sigma <= 0:
                     sigma = 1.0
         sigma = float(sigma)
-        denom = 2.0 * (sigma ** 2)
+        denom = 2.0 * (sigma**2)
         # avoid overflow: where D is inf -> similarity 0
         with np.errstate(over="ignore"):
-            sim = np.exp(-(D ** 2) / denom)
+            sim = np.exp(-(D**2) / denom)
         sim[~np.isfinite(sim)] = 0.0
 
     elif method == "linear":
@@ -321,7 +330,9 @@ def locality_matrix(
     return pd.DataFrame(sim, index=spot_ids, columns=spot_ids)
 
 
-def compute_tangram_refined_metric_1(adata_z: AnnData, adata_predicted_z: AnnData, dataset_folder: Path) -> pd.DataFrame:
+def compute_tangram_refined_metric_1(
+    adata_z: AnnData, adata_predicted_z: AnnData, dataset_folder: Path
+) -> pd.DataFrame:
     """
     Compute for each spot (in the order adata_z.obs_names) two metrics:
     - cossim: cosine similarity between the (locally smoothed) observed and predicted vector (over genes)
@@ -333,18 +344,22 @@ def compute_tangram_refined_metric_1(adata_z: AnnData, adata_predicted_z: AnnDat
     # Get locality matrix (pandas DataFrame with spot_ids index/columns)
     lm = locality_matrix(dataset_folder)
     if lm.shape[0] != adata_z.n_obs:
-        raise AssertionError("Locality matrix und AnnData haben unterschiedliche Anzahl an Spots.")
+        raise AssertionError(
+            "Locality matrix und AnnData haben unterschiedliche Anzahl an Spots."
+        )
 
     # Reorder locality matrix to match adata row order (adata.obs_names must match spot ids)
-    lm_ordered = lm.loc[adata_z.obs_names, adata_z.obs_names].values  # numpy array in correct order
+    lm_ordered = lm.loc[
+        adata_z.obs_names, adata_z.obs_names
+    ].values  # numpy array in correct order
 
     # helper to get dense array
     def _dense(X):
         return X.toarray() if hasattr(X, "toarray") else np.asarray(X)
 
     # Apply locality matrix without modifying the AnnData objects
-    local_z = lm_ordered.dot(_dense(adata_z.X))                 # shape (n_spots, n_genes)
-    local_pred = lm_ordered.dot(_dense(adata_predicted_z.X))    # same shape
+    local_z = lm_ordered.dot(_dense(adata_z.X))  # shape (n_spots, n_genes)
+    local_pred = lm_ordered.dot(_dense(adata_predicted_z.X))  # same shape
 
     n_spots = local_z.shape[0]
     spot_ids = list(adata_z.obs_names)
@@ -358,15 +373,19 @@ def compute_tangram_refined_metric_1(adata_z: AnnData, adata_predicted_z: AnnDat
         cossim_vals[i] = float(cosine_similarity(vec_z, vec_pred))
         sqrt_cossim_vals[i] = float(sqrt_cosine_similarity(vec_z, vec_pred))
 
-    result_df = pd.DataFrame({
-        "cossim": cossim_vals,
-        "sqrt_cossim": sqrt_cossim_vals
-    }, index=spot_ids)
+    result_df = pd.DataFrame(
+        {"cossim": cossim_vals, "sqrt_cossim": sqrt_cossim_vals}, index=spot_ids
+    )
 
     return result_df
 
 
-def compute_tangram_refined_metric_3(adata_z: AnnData, adata_predicted_z: AnnData, dataset_folder: Path, save_gog_json: Path = None) -> pd.DataFrame:
+def compute_tangram_refined_metric_3(
+    adata_z: AnnData,
+    adata_predicted_z: AnnData,
+    dataset_folder: Path,
+    save_gog_json: Path = None,
+) -> pd.DataFrame:
     """
     Compute the Getis-Ord G* statistic for each spot (in the order adata_z.obs_names).
 
@@ -381,7 +400,9 @@ def compute_tangram_refined_metric_3(adata_z: AnnData, adata_predicted_z: AnnDat
     # --- read locality matrix (DataFrame) and convert to numpy for repeated use ---
     blm = binary_adjacency_matrix_from_graph(
         dataset_folder,
-        create_spatial_graph(dataset_folder, neighborhood_type=NeighborhoodType.KNN, k=4),
+        create_spatial_graph(
+            dataset_folder, neighborhood_type=NeighborhoodType.KNN, k=4
+        ),
     )
     W = blm.values
     n_genes = adata_z.n_vars
@@ -404,14 +425,9 @@ def compute_tangram_refined_metric_3(adata_z: AnnData, adata_predicted_z: AnnDat
         getis_z_pred = getis_ord_g_stat(data_pred[:, g], W)
 
         if np.any(np.isnan(getis_z)) or np.any(np.isnan(getis_z_pred)):
-            gog_vals[g] = float('nan')
+            gog_vals[g] = float("nan")
         else:
-            value = float(
-                cosine_similarity(
-                    getis_z,
-                    getis_z_pred
-                )
-            )
+            value = float(cosine_similarity(getis_z, getis_z_pred))
             gog_vals[g] = value
             gog_dict[gene_ids[g]] = value
 
@@ -419,15 +435,18 @@ def compute_tangram_refined_metric_3(adata_z: AnnData, adata_predicted_z: AnnDat
         if counter % 2000 == 0:
             logging.info(f"Fertig mit {counter}/{n_genes} Genen für TG Ref Metric 3")
 
-    result_df = pd.DataFrame({
-        "gog": gog_vals,
-    }, index=gene_ids)
+    result_df = pd.DataFrame(
+        {
+            "gog": gog_vals,
+        },
+        index=gene_ids,
+    )
 
     # Optional: save gog per gene as json
     if save_gog_json is not None:
         save_gog_json.parent.mkdir(parents=True, exist_ok=True)
         # JSON-serializable (floats already)
-        with save_gog_json.open('w', encoding='utf-8') as f:
+        with save_gog_json.open("w", encoding="utf-8") as f:
             json.dump(gog_dict, f, indent=4)
 
     return result_df
@@ -450,7 +469,9 @@ def visualize_tangram_refined_metrics(
     required_m1 = ["cossim", "sqrt_cossim"]
     for col in required_m1:
         if col not in metric_1_df.columns:
-            warnings.warn(f"metric_1_df enthält nicht die erwartete Spalte '{col}'. Abbruch.")
+            warnings.warn(
+                f"metric_1_df enthält nicht die erwartete Spalte '{col}'. Abbruch."
+            )
             return
     if "gog" not in metric_3_df.columns:
         warnings.warn("metric_3_df enthält nicht die erwartete Spalte 'gog'. Abbruch.")
@@ -480,7 +501,9 @@ def visualize_tangram_refined_metrics(
         data_left.append(s_sqrt)
         labels_left.append("sqrt_cossim")
 
-    bp_left = axes[0].boxplot(data_left, labels=labels_left, patch_artist=True, notch=False)
+    bp_left = axes[0].boxplot(
+        data_left, labels=labels_left, patch_artist=True, notch=False
+    )
     colors_left = cm.viridis(np.linspace(0.25, 0.6, len(data_left)))
     for patch, color in zip(bp_left.get("boxes", []), colors_left):
         patch.set_facecolor(color)
@@ -489,7 +512,15 @@ def visualize_tangram_refined_metrics(
     axes[0].set_xticks(range(1, len(labels_left) + 1))
     # annotate counts
     for i, arr in enumerate(data_left, start=1):
-        axes[0].text(i, axes[0].get_ylim()[0], f"n={len(arr)}", ha="center", va="bottom", fontsize=8, color="gray")
+        axes[0].text(
+            i,
+            axes[0].get_ylim()[0],
+            f"n={len(arr)}",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            color="gray",
+        )
 
     # Right: gog single boxplot
     bp_right = axes[1].boxplot([s_gog], labels=["gog"], patch_artist=True, notch=False)
@@ -498,13 +529,21 @@ def visualize_tangram_refined_metrics(
         patch.set_alpha(0.8)
     axes[1].set_title("Metric 3: gog")
     axes[1].set_xticks([1])
-    axes[1].text(1, axes[1].get_ylim()[0], f"n={s_gog.size}", ha="center", va="bottom", fontsize=8, color="gray")
+    axes[1].text(
+        1,
+        axes[1].get_ylim()[0],
+        f"n={s_gog.size}",
+        ha="center",
+        va="bottom",
+        fontsize=8,
+        color="gray",
+    )
 
     axes[0].set_ylabel("Wert")
     plt.tight_layout()
 
     if output_folder:
-        plt.savefig(output_folder / f"o4_tg_ref_metrics.png", bbox_inches='tight')
+        plt.savefig(output_folder / f"o4_tg_ref_metrics.png", bbox_inches="tight")
     else:
         plt.show()
 
@@ -514,7 +553,12 @@ def visualize_tangram_refined_metrics(
 # ------------ Own locality Metrics
 
 
-def add_own_metrics_to_edges(adata_z: AnnData, adata_predicted_z: AnnData, graph: nx.Graph, save_own_cossim: Path = None) -> nx.Graph:
+def add_own_metrics_to_edges(
+    adata_z: AnnData,
+    adata_predicted_z: AnnData,
+    graph: nx.Graph,
+    save_own_cossim: Path = None,
+) -> nx.Graph:
 
     # helper to get dense 1D numpy array for a given spot id (obs_name)
     def _get_spot_vector(adata: AnnData, spot_id: str) -> np.ndarray:
@@ -563,7 +607,7 @@ def add_own_metrics_to_edges(adata_z: AnnData, adata_predicted_z: AnnData, graph
     if save_own_cossim is not None:
         save_own_cossim.parent.mkdir(parents=True, exist_ok=True)
         # JSON-serializable (floats already)
-        with save_own_cossim.open('w', encoding='utf-8') as f:
+        with save_own_cossim.open("w", encoding="utf-8") as f:
             json.dump(cossim_dict, f, indent=4)
 
     return graph
@@ -634,7 +678,9 @@ def create_box_plots_from_edge_annots(
     bp = ax.boxplot(data_list, labels=labels, patch_artist=True, notch=False)
 
     # color boxes
-    for patch, color in zip(bp['boxes'], plt.cm.viridis(np.linspace(0, 1, len(bp['boxes'])))):
+    for patch, color in zip(
+        bp["boxes"], plt.cm.viridis(np.linspace(0, 1, len(bp["boxes"])))
+    ):
         patch.set_facecolor(color)
         patch.set_alpha(0.7)
 
@@ -645,11 +691,20 @@ def create_box_plots_from_edge_annots(
     # annotate counts under each box
     xticks = np.arange(1, len(labels) + 1)
     for xt, cnt in zip(xticks, counts):
-        ax.text(xt, ax.get_ylim()[0], f"n={cnt}", ha='center', va='bottom', fontsize=8, color='gray', rotation=0)
+        ax.text(
+            xt,
+            ax.get_ylim()[0],
+            f"n={cnt}",
+            ha="center",
+            va="bottom",
+            fontsize=8,
+            color="gray",
+            rotation=0,
+        )
 
     plt.tight_layout()
     if output_folder:
-        plt.savefig(output_folder / f"o4_edges_box_plots.png", bbox_inches='tight')
+        plt.savefig(output_folder / f"o4_edges_box_plots.png", bbox_inches="tight")
     else:
         plt.show()
 
@@ -691,7 +746,8 @@ def plot_edge_cossim_spatial(
             continue
         if u not in pos or v not in pos:
             continue
-        p1 = pos[u]; p2 = pos[v]
+        p1 = pos[u]
+        p2 = pos[v]
         lines.append([p1, p2])
         try:
             vals.append(float(d[metric]))
@@ -699,13 +755,17 @@ def plot_edge_cossim_spatial(
             vals.append(np.nan)
 
     if len(lines) == 0:
-        warnings.warn(f"Keine Kanten mit Attribut '{metric}' gefunden. Nichts zu plotten.")
+        warnings.warn(
+            f"Keine Kanten mit Attribut '{metric}' gefunden. Nichts zu plotten."
+        )
         return
 
     vals = np.array(vals, dtype=float)
     finite_mask = np.isfinite(vals)
     if not np.any(finite_mask):
-        warnings.warn(f"Alle Werte für '{metric}' sind nicht-finite. Nichts zu plotten.")
+        warnings.warn(
+            f"Alle Werte für '{metric}' sind nicht-finite. Nichts zu plotten."
+        )
         return
 
     vmin = np.nanmin(vals)
@@ -735,7 +795,8 @@ def plot_edge_cossim_spatial(
     ax.scatter(xs, ys, s=node_size, c="black", zorder=2)
 
     # set limits with some padding
-    all_x = np.array(xs); all_y = np.array(ys)
+    all_x = np.array(xs)
+    all_y = np.array(ys)
     if all_x.size and all_y.size:
         xpad = (all_x.max() - all_x.min()) * 0.05 if all_x.max() != all_x.min() else 1.0
         ypad = (all_y.max() - all_y.min()) * 0.05 if all_y.max() != all_y.min() else 1.0
@@ -755,7 +816,7 @@ def plot_edge_cossim_spatial(
     plt.tight_layout()
 
     if output_folder:
-        plt.savefig(output_folder / f"o4_edges_spatial_plots.png", bbox_inches='tight')
+        plt.savefig(output_folder / f"o4_edges_spatial_plots.png", bbox_inches="tight")
     else:
         plt.show()
 
@@ -790,13 +851,19 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_output_folder: Path)
     result_own_knn_cossim_file = output_folder_knn / "cossim.json"
 
     # S x shared G
-    adata_z, adata_predicted_z = get_z_real_and_predicted_data_only_shared_genes(dataset_folder, result_gep)
+    adata_z, adata_predicted_z = get_z_real_and_predicted_data_only_shared_genes(
+        dataset_folder, result_gep
+    )
     # Assert that both DataFrames have the same shape of genes and spots
-    assert adata_z.shape == adata_predicted_z.shape, "DataFrames haben unterschiedliche Formen."
+    assert (
+        adata_z.shape == adata_predicted_z.shape
+    ), "DataFrames haben unterschiedliche Formen."
     assert adata_z.n_obs == result_gep.n_vars
 
     # KNN
-    graph = create_spatial_graph(dataset_folder, neighborhood_type=NeighborhoodType.KNN, k=4)
+    graph = create_spatial_graph(
+        dataset_folder, neighborhood_type=NeighborhoodType.KNN, k=4
+    )
     graph = add_own_metrics_to_edges(
         adata_z,
         adata_predicted_z,

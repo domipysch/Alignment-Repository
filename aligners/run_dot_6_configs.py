@@ -3,22 +3,30 @@ import argparse
 from pathlib import Path
 import os
 from run_dot import dot_align_data
-from MPA_Code.metrics import run_all_metrics, run_all_shared_boxplots
-from MPA_Code.utils.io import csv_to_anndata
-
+from ..metrics import run_all_metrics, run_all_shared_boxplots
+from ..utils.io import csv_to_anndata
 
 if __name__ == "__main__":
     """
-    Run DOT alignment on a prepared dataset at given folder.
+    Run DOT alignment on a prepared dataset at given folder under 6 different settings:
+    (Probabilistic vs Deterministic mapping) x (Individual cells vs Major cell types vs Minor cell types)
     """
     # Configure basic logging
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     logger = logging.getLogger(__name__)
 
-    parser = argparse.ArgumentParser(description="Run DOT alignment on a dataset folder")
-    parser.add_argument('-d', '--dataset', type=str, help='Path to dataset folder')
-    parser.add_argument('-o', '--output_folder', type=str, help='Path where to store result')
-    parser.add_argument('-m', '--metrics_folder', type=str, help='Path where to store metrics')
+    parser = argparse.ArgumentParser(
+        description="Run DOT alignment on a dataset folder"
+    )
+    parser.add_argument("-d", "--dataset", type=str, help="Path to dataset folder")
+    parser.add_argument(
+        "-o", "--output_folder", type=str, help="Path where to store result"
+    )
+    parser.add_argument(
+        "-m", "--metrics_folder", type=str, help="Path where to store metrics"
+    )
     args = parser.parse_args()
 
     dataset_folder = Path(args.dataset)
@@ -34,7 +42,9 @@ if __name__ == "__main__":
 
     # If output folder not empty, error
     if any(output_folder.iterdir()):
-        logging.error(f"Output folder is not empty: {output_folder}. Please provide an empty folder.")
+        logging.error(
+            f"Output folder is not empty: {output_folder}. Please provide an empty folder."
+        )
         exit(1)
 
     # If metrics folder does not exist, create it
@@ -45,12 +55,20 @@ if __name__ == "__main__":
 
     # If metrics folder not empty, error
     if any(metrics_folder.iterdir()):
-        logging.error(f"metrics_folder is not empty: {metrics_folder}. Please provide an empty folder.")
+        logging.error(
+            f"metrics_folder is not empty: {metrics_folder}. Please provide an empty folder."
+        )
         exit(1)
 
     logging.info("Run 1/6: Prob, individual cells")
     output_path = os.path.join(args.output_folder, "prob_cells_GEP.csv")
-    dot_align_data(args.dataset, "HSO", "probabilistic-mapping", cell_type_key="cellID", output_path=output_path)
+    dot_align_data(
+        args.dataset,
+        "HSO",
+        "probabilistic-mapping",
+        cell_type_key="cellID",
+        output_path=output_path,
+    )
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "prob_cells",
@@ -60,7 +78,13 @@ if __name__ == "__main__":
 
     logging.info("Run 2/6: Prob, Cell type major")
     output_path = os.path.join(args.output_folder, "prob_celltype_major_GEP.csv")
-    dot_align_data(args.dataset, "HSO", "probabilistic-mapping", cell_type_key="cellType", output_path=output_path)
+    dot_align_data(
+        args.dataset,
+        "HSO",
+        "probabilistic-mapping",
+        cell_type_key="cellType",
+        output_path=output_path,
+    )
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "prob_celltype_major",
@@ -70,7 +94,13 @@ if __name__ == "__main__":
 
     logging.info("Run 3/6: Prob, Cell type minor")
     output_path = os.path.join(args.output_folder, "prob_celltype_minor_GEP.csv")
-    dot_align_data(args.dataset, "HSO", "probabilistic-mapping", cell_type_key="cellTypeMinor", output_path=output_path)
+    dot_align_data(
+        args.dataset,
+        "HSO",
+        "probabilistic-mapping",
+        cell_type_key="cellTypeMinor",
+        output_path=output_path,
+    )
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "prob_celltype_minor",
@@ -80,7 +110,13 @@ if __name__ == "__main__":
 
     logging.info("Run 4/6: Det, individual cells")
     output_path = os.path.join(args.output_folder, "det_cells_GEP.csv")
-    dot_align_data(args.dataset, "HSO", "deterministic-mapping", cell_type_key="cellID", output_path=output_path)
+    dot_align_data(
+        args.dataset,
+        "HSO",
+        "deterministic-mapping",
+        cell_type_key="cellID",
+        output_path=output_path,
+    )
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "det_cells",
@@ -90,7 +126,13 @@ if __name__ == "__main__":
 
     logging.info("Run 5/6: Det, Cell type major")
     output_path = os.path.join(args.output_folder, "det_celltype_major_GEP.csv")
-    dot_align_data(args.dataset, "HSO", "deterministic-mapping", cell_type_key="cellType", output_path=output_path)
+    dot_align_data(
+        args.dataset,
+        "HSO",
+        "deterministic-mapping",
+        cell_type_key="cellType",
+        output_path=output_path,
+    )
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "det_celltype_major",
@@ -100,7 +142,13 @@ if __name__ == "__main__":
 
     logging.info("Run 6/6: Det, Cell type minor")
     output_path = os.path.join(args.output_folder, "det_celltype_minor_GEP.csv")
-    dot_align_data(args.dataset, "HSO", "deterministic-mapping", cell_type_key="cellTypeMinor", output_path=output_path)
+    dot_align_data(
+        args.dataset,
+        "HSO",
+        "deterministic-mapping",
+        cell_type_key="cellTypeMinor",
+        output_path=output_path,
+    )
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "det_celltype_minor",
@@ -112,8 +160,12 @@ if __name__ == "__main__":
     metric_folder_shared = metrics_folder / "shared"
     metric_folder_shared.mkdir(parents=True, exist_ok=True)
     folders = [
-        "det_cells", "det_celltype_major", "det_celltype_minor",
-        "prob_cells", "prob_celltype_major", "prob_celltype_minor",
+        "det_cells",
+        "det_celltype_major",
+        "det_celltype_minor",
+        "prob_cells",
+        "prob_celltype_major",
+        "prob_celltype_minor",
     ]
     # Run shared metrics
     run_all_shared_boxplots.main(

@@ -9,10 +9,13 @@ import json
 from anndata import AnnData
 from .utils.dataset_query import get_z_real_and_predicted_data_only_shared_genes
 from .utils.distance_metrics import cosine_similarity
+
 logger = logging.getLogger(__name__)
 
 
-def compute_metrics_per_gene(adata_z, adata_predicted_z, save_cossim_json: Path = None) -> None:
+def compute_metrics_per_gene(
+    adata_z, adata_predicted_z, save_cossim_json: Path = None
+) -> None:
     """
     Compute cosine similarity (or other distance metrics) per gene and write results directly into
     adata_predicted_z.var['cossim'].
@@ -20,9 +23,9 @@ def compute_metrics_per_gene(adata_z, adata_predicted_z, save_cossim_json: Path 
     Optional: if save_cossim_json is provided (Path), the per-gene cossim values
     are also written to a JSON file (gene -> float).
     """
-    
+
     # initialize column with NaN if not already present
-    adata_predicted_z.var['cossim'] = np.nan
+    adata_predicted_z.var["cossim"] = np.nan
     # adata_predicted_z.var['sqrt_cossim'] = np.nan
     # adata_predicted_z.var['eucl'] = np.nan
     # adata_predicted_z.var['rmse'] = np.nan
@@ -64,7 +67,7 @@ def compute_metrics_per_gene(adata_z, adata_predicted_z, save_cossim_json: Path 
         # val_tv = float(total_variation(vec_z, vec_pred))
 
         # Store directly in adata_predicted_z.var
-        adata_predicted_z.var.at[gene, 'cossim'] = val_cossim
+        adata_predicted_z.var.at[gene, "cossim"] = val_cossim
         # adata_predicted_z.var.at[gene, 'sqrt_cossim'] = val_sqrt_cossim
         # adata_predicted_z.var.at[gene, 'eucl'] = val_eucl
         # adata_predicted_z.var.at[gene, 'rmse'] = val_rmse
@@ -90,18 +93,20 @@ def compute_metrics_per_gene(adata_z, adata_predicted_z, save_cossim_json: Path 
     if save_cossim_json is not None:
         save_cossim_json.parent.mkdir(parents=True, exist_ok=True)
         # JSON-serializable (floats already)
-        with save_cossim_json.open('w', encoding='utf-8') as f:
+        with save_cossim_json.open("w", encoding="utf-8") as f:
             json.dump(cossim_dict, f, indent=4)
 
 
-def compute_metrics_per_spot(adata_z, adata_predicted_z, save_cossim_json: Path = None) -> None:
+def compute_metrics_per_spot(
+    adata_z, adata_predicted_z, save_cossim_json: Path = None
+) -> None:
     """
     Compute cosine similarity (or other distance metrics) per spot and write results directly into
     adata_predicted_z.obs['cossim'].
     """
 
     # initialize obs columns with NaN if not already present
-    adata_predicted_z.obs['cossim'] = np.nan
+    adata_predicted_z.obs["cossim"] = np.nan
     # adata_predicted_z.obs['sqrt_cossim'] = np.nan
     # adata_predicted_z.obs['eucl'] = np.nan
     # adata_predicted_z.obs['rmse'] = np.nan
@@ -127,7 +132,7 @@ def compute_metrics_per_spot(adata_z, adata_predicted_z, save_cossim_json: Path 
 
         # Store metrics directly in adata_predicted_z.obs
         val_cossim = cosine_similarity(vec_z, vec_pred)
-        adata_predicted_z.obs.at[spot, 'cossim'] = val_cossim
+        adata_predicted_z.obs.at[spot, "cossim"] = val_cossim
         # adata_predicted_z.obs.at[spot, 'sqrt_cossim'] = sqrt_cosine_similarity(vec_z, vec_pred)
         # adata_predicted_z.obs.at[spot, 'eucl'] = euclidean_l2(vec_z, vec_pred)
         # adata_predicted_z.obs.at[spot, 'rmse'] = rmse(vec_z, vec_pred)
@@ -151,11 +156,13 @@ def compute_metrics_per_spot(adata_z, adata_predicted_z, save_cossim_json: Path 
     if save_cossim_json is not None:
         save_cossim_json.parent.mkdir(parents=True, exist_ok=True)
         # JSON-serializable (floats already)
-        with save_cossim_json.open('w', encoding='utf-8') as f:
+        with save_cossim_json.open("w", encoding="utf-8") as f:
             json.dump(cossim_dict, f, indent=4)
 
 
-def generate_box_plot_metrics_per_gene(adata_predicted_z, output_folder: Path = None, columns: list[str] = None) -> None:
+def generate_box_plot_metrics_per_gene(
+    adata_predicted_z, output_folder: Path = None, columns: list[str] = None
+) -> None:
     """
     Generate boxplots for numeric metrics in adata_predicted_z.var.
     - All metrics whose (non-NaN) values lie within [0,1] are plotted together in one figure.
@@ -164,7 +171,7 @@ def generate_box_plot_metrics_per_gene(adata_predicted_z, output_folder: Path = 
     - columns: list of column names to plot; defaults to ['cossim'].
     """
     if columns is None:
-        columns = ['cossim']
+        columns = ["cossim"]
     df_var = adata_predicted_z.var
     numeric = df_var.select_dtypes(include=[np.number])
     numeric = numeric[[c for c in columns if c in numeric.columns]]
@@ -198,17 +205,22 @@ def generate_box_plot_metrics_per_gene(adata_predicted_z, output_folder: Path = 
         n = len(unit_cols)
         width = max(6, n * 0.4)
         fig, ax = plt.subplots(1, 1, figsize=(width, 5), constrained_layout=True)
-        bp = ax.boxplot(data_unit, labels=unit_cols, patch_artist=True, medianprops=dict(color='black'))
-        for i, patch in enumerate(bp['boxes']):
-            patch.set_facecolor('#b2df8a')
-            patch.set_edgecolor('black')
+        bp = ax.boxplot(
+            data_unit,
+            labels=unit_cols,
+            patch_artist=True,
+            medianprops=dict(color="black"),
+        )
+        for i, patch in enumerate(bp["boxes"]):
+            patch.set_facecolor("#b2df8a")
+            patch.set_edgecolor("black")
             patch.set_alpha(0.9)
-        ax.set_title('Metrics in [0,1]')
-        ax.set_ylabel('Value')
-        plt.setp(ax.get_xticklabels(), rotation=45, ha='right', fontsize=9)
+        ax.set_title("Metrics in [0,1]")
+        ax.set_ylabel("Value")
+        plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=9)
 
         if output_folder:
-            plt.savefig(output_folder / f"o2_0-1_metrics.png", bbox_inches='tight')
+            plt.savefig(output_folder / f"o2_0-1_metrics.png", bbox_inches="tight")
         else:
             plt.show()
 
@@ -220,28 +232,32 @@ def generate_box_plot_metrics_per_gene(adata_predicted_z, output_folder: Path = 
         # If truly no values, draw empty plot with a message
         fig, ax = plt.subplots(1, 1, figsize=(4, 5), constrained_layout=True)
         if vals.size == 0:
-            ax.text(0.5, 0.5, f"No data for {col}", ha='center', va='center')
+            ax.text(0.5, 0.5, f"No data for {col}", ha="center", va="center")
             ax.set_title(col)
             ax.set_xticks([])
         else:
-            bp = ax.boxplot(vals, labels=[col], patch_artist=True, medianprops=dict(color='black'))
-            box_color = '#a6cee3'
-            for patch in bp['boxes']:
+            bp = ax.boxplot(
+                vals, labels=[col], patch_artist=True, medianprops=dict(color="black")
+            )
+            box_color = "#a6cee3"
+            for patch in bp["boxes"]:
                 patch.set_facecolor(box_color)
-                patch.set_edgecolor('black')
+                patch.set_edgecolor("black")
                 patch.set_alpha(0.9)
-            ax.set_ylabel('Value')
+            ax.set_ylabel("Value")
             ax.set_title(col)
-            plt.setp(ax.get_xticklabels(), rotation=45, ha='right', fontsize=9)
+            plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=9)
 
         if output_folder:
-            plt.savefig(output_folder / f"o2_{col}.png", bbox_inches='tight')
+            plt.savefig(output_folder / f"o2_{col}.png", bbox_inches="tight")
         else:
             plt.show()
         plt.close(fig)
 
 
-def generate_box_plot_metrics_per_spot(adata_predicted_z, output_folder: Path = None, columns: list[str] = None) -> None:
+def generate_box_plot_metrics_per_spot(
+    adata_predicted_z, output_folder: Path = None, columns: list[str] = None
+) -> None:
     """
     Generate boxplots for numeric metrics in adata_predicted_z.obs.
     - All metrics whose (non-NaN) values lie within [0,1] are plotted together in one figure.
@@ -250,7 +266,7 @@ def generate_box_plot_metrics_per_spot(adata_predicted_z, output_folder: Path = 
     - columns: list of column names to plot; defaults to ['cossim'].
     """
     if columns is None:
-        columns = ['cossim']
+        columns = ["cossim"]
 
     df_obs = adata_predicted_z.obs
     numeric = df_obs.select_dtypes(include=[np.number])
@@ -284,19 +300,26 @@ def generate_box_plot_metrics_per_spot(adata_predicted_z, output_folder: Path = 
         n = len(unit_cols)
         width = max(6, n * 0.4)
         fig, ax = plt.subplots(1, 1, figsize=(width, 5), constrained_layout=True)
-        bp = ax.boxplot(data_unit, labels=unit_cols, patch_artist=True, medianprops=dict(color='black'))
-        for i, patch in enumerate(bp['boxes']):
-            patch.set_facecolor('#b2df8a')
-            patch.set_edgecolor('black')
+        bp = ax.boxplot(
+            data_unit,
+            labels=unit_cols,
+            patch_artist=True,
+            medianprops=dict(color="black"),
+        )
+        for i, patch in enumerate(bp["boxes"]):
+            patch.set_facecolor("#b2df8a")
+            patch.set_edgecolor("black")
             patch.set_alpha(0.9)
-        ax.set_title('Spot metrics in [0,1]')
-        ax.set_ylabel('Value')
-        plt.setp(ax.get_xticklabels(), rotation=45, ha='right', fontsize=9)
+        ax.set_title("Spot metrics in [0,1]")
+        ax.set_ylabel("Value")
+        plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=9)
 
         if output_folder:
             output_folder = Path(output_folder)
             output_folder.mkdir(parents=True, exist_ok=True)
-            plt.savefig(output_folder / f"o2_spots_0-1_metrics.png", bbox_inches='tight')
+            plt.savefig(
+                output_folder / f"o2_spots_0-1_metrics.png", bbox_inches="tight"
+            )
         else:
             plt.show()
         plt.close(fig)
@@ -306,30 +329,34 @@ def generate_box_plot_metrics_per_spot(adata_predicted_z, output_folder: Path = 
         vals = col_data.get(col, np.array([]))
         fig, ax = plt.subplots(1, 1, figsize=(4, 5), constrained_layout=True)
         if vals.size == 0:
-            ax.text(0.5, 0.5, f"No data for {col}", ha='center', va='center')
+            ax.text(0.5, 0.5, f"No data for {col}", ha="center", va="center")
             ax.set_title(col)
             ax.set_xticks([])
         else:
-            bp = ax.boxplot(vals, labels=[col], patch_artist=True, medianprops=dict(color='black'))
-            box_color = '#a6cee3'
-            for patch in bp['boxes']:
+            bp = ax.boxplot(
+                vals, labels=[col], patch_artist=True, medianprops=dict(color="black")
+            )
+            box_color = "#a6cee3"
+            for patch in bp["boxes"]:
                 patch.set_facecolor(box_color)
-                patch.set_edgecolor('black')
+                patch.set_edgecolor("black")
                 patch.set_alpha(0.9)
-            ax.set_ylabel('Value')
+            ax.set_ylabel("Value")
             ax.set_title(col)
-            plt.setp(ax.get_xticklabels(), rotation=45, ha='right', fontsize=9)
+            plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=9)
 
         if output_folder:
             output_folder = Path(output_folder)
             output_folder.mkdir(parents=True, exist_ok=True)
-            plt.savefig(output_folder / f"o2_spots_{col}.png", bbox_inches='tight')
+            plt.savefig(output_folder / f"o2_spots_{col}.png", bbox_inches="tight")
         else:
             plt.show()
         plt.close(fig)
 
 
-def generate_gene_spatial_distribution_plot(adata_z, adata_predicted_z, gene_name: str, output_path: Path) -> None:
+def generate_gene_spatial_distribution_plot(
+    adata_z, adata_predicted_z, gene_name: str, output_path: Path
+) -> None:
     """
     Generate a spatial distribution plot for a given gene:
     - Left panel: real Z data (adata_z)
@@ -339,11 +366,16 @@ def generate_gene_spatial_distribution_plot(adata_z, adata_predicted_z, gene_nam
     i.e., there are no light-gray 'uncolored' points anymore.
     """
     # Ensure the gene exists
-    if gene_name not in adata_z.var_names or gene_name not in adata_predicted_z.var_names:
-        raise ValueError(f"Gene '{gene_name}' nicht in beiden AnnData-Objekten gefunden.")
+    if (
+        gene_name not in adata_z.var_names
+        or gene_name not in adata_predicted_z.var_names
+    ):
+        raise ValueError(
+            f"Gene '{gene_name}' nicht in beiden AnnData-Objekten gefunden."
+        )
 
     # Try to read cossim from adata_predicted_z.var (if available)
-    cossim_val = float(adata_predicted_z.var.at[gene_name, 'cossim'])
+    cossim_val = float(adata_predicted_z.var.at[gene_name, "cossim"])
 
     # Expression vectors per spot (1D) - robust against sparse/dense matrices
     def vec_flat(adata, g):
@@ -354,14 +386,18 @@ def generate_gene_spatial_distribution_plot(adata_z, adata_predicted_z, gene_nam
     vec_pred = vec_flat(adata_predicted_z, gene_name).astype(float)
 
     # Coordinates (assume adata.obsm['coords'] exists and matches obs_names order)
-    if 'coords' not in adata_z.obsm or 'coords' not in adata_predicted_z.obsm:
-        raise ValueError("Räumliche Koordinaten (obsm['coords']) fehlen in einem der AnnData-Objekte.")
-    coords_z = np.asarray(adata_z.obsm['coords'])
-    coords_pred = np.asarray(adata_predicted_z.obsm['coords'])
+    if "coords" not in adata_z.obsm or "coords" not in adata_predicted_z.obsm:
+        raise ValueError(
+            "Räumliche Koordinaten (obsm['coords']) fehlen in einem der AnnData-Objekte."
+        )
+    coords_z = np.asarray(adata_z.obsm["coords"])
+    coords_pred = np.asarray(adata_predicted_z.obsm["coords"])
 
     # Check shapes
     if coords_z.shape[0] != vec_z.shape[0] or coords_pred.shape[0] != vec_pred.shape[0]:
-        raise ValueError("Anzahl der Spots stimmt nicht mit der Länge der Expressionsvektoren überein.")
+        raise ValueError(
+            "Anzahl der Spots stimmt nicht mit der Länge der Expressionsvektoren überein."
+        )
 
     cmap = plt.cm.viridis
 
@@ -388,32 +424,54 @@ def generate_gene_spatial_distribution_plot(adata_z, adata_predicted_z, gene_nam
             vmax_local = vmin_local + 1.0
 
         norm_local = plt.Normalize(vmin=vmin_local, vmax=vmax_local)
-        sc = ax.scatter(coords[:, 0], coords[:, 1],
-                        c=vals,
-                        cmap=cmap, norm=norm_local,
-                        s=40, edgecolors='k', linewidths=0.2)
+        sc = ax.scatter(
+            coords[:, 0],
+            coords[:, 1],
+            c=vals,
+            cmap=cmap,
+            norm=norm_local,
+            s=40,
+            edgecolors="k",
+            linewidths=0.2,
+        )
         ax.set_title(title, fontsize=title_fs)
-        ax.set_xlabel('x', fontsize=label_fs)
-        ax.set_ylabel('y', fontsize=label_fs)
-        ax.tick_params(axis='both', which='major', labelsize=tick_fs)
-        ax.set_aspect('equal', adjustable='box')
+        ax.set_xlabel("x", fontsize=label_fs)
+        ax.set_ylabel("y", fontsize=label_fs)
+        ax.tick_params(axis="both", which="major", labelsize=tick_fs)
+        ax.set_aspect("equal", adjustable="box")
         return sc, norm_local, vmin_local, vmax_local
 
-    sc1, norm1, vmin1, v1 = _draw_panel(axes[0], coords_z, vec_z, f"Input data Z - {gene_name}")
-    sc2, norm2, vmin2, v2 = _draw_panel(axes[1], coords_pred, vec_pred, f"Predicted data Z' - {gene_name}")
+    sc1, norm1, vmin1, v1 = _draw_panel(
+        axes[0], coords_z, vec_z, f"Input data Z - {gene_name}"
+    )
+    sc2, norm2, vmin2, v2 = _draw_panel(
+        axes[1], coords_pred, vec_pred, f"Predicted data Z' - {gene_name}"
+    )
 
     # Separate colorbars: one colorbar per axis (local scale)
     if sc1 is not None:
-        cbar1 = fig.colorbar(sc1, ax=axes[0], orientation='vertical', fraction=0.046, pad=0.02)
-        cbar1.set_label(f'Expression (counts), range [{vmin1:.2f}, {v1:.2f}]', fontsize=cbar_label_fs)
+        cbar1 = fig.colorbar(
+            sc1, ax=axes[0], orientation="vertical", fraction=0.046, pad=0.02
+        )
+        cbar1.set_label(
+            f"Expression (counts), range [{vmin1:.2f}, {v1:.2f}]",
+            fontsize=cbar_label_fs,
+        )
         cbar1.ax.tick_params(labelsize=tick_fs)
     if sc2 is not None:
-        cbar2 = fig.colorbar(sc2, ax=axes[1], orientation='vertical', fraction=0.046, pad=0.02)
-        cbar2.set_label(f'Expression (counts), range [{vmin2:.2f}, {v2:.2f}]', fontsize=cbar_label_fs)
+        cbar2 = fig.colorbar(
+            sc2, ax=axes[1], orientation="vertical", fraction=0.046, pad=0.02
+        )
+        cbar2.set_label(
+            f"Expression (counts), range [{vmin2:.2f}, {v2:.2f}]",
+            fontsize=cbar_label_fs,
+        )
         cbar2.ax.tick_params(labelsize=tick_fs)
 
     # Show cosine similarity value prominently as suptitle (if available)
-    fig.suptitle(f"Gene {gene_name} — cosine similarity: {cossim_val:.3f}", fontsize=suptitle_fs)
+    fig.suptitle(
+        f"Gene {gene_name} — cosine similarity: {cossim_val:.3f}", fontsize=suptitle_fs
+    )
 
     # Save or show (ensure target directory exists)
     if output_path:
@@ -424,7 +482,9 @@ def generate_gene_spatial_distribution_plot(adata_z, adata_predicted_z, gene_nam
     plt.close(fig)
 
 
-def generate_spatial_distribution_plots_for_some_genes(adata_z, adata_predicted_z, metrics_folder_spatial_per_gene: Path) -> None:
+def generate_spatial_distribution_plots_for_some_genes(
+    adata_z, adata_predicted_z, metrics_folder_spatial_per_gene: Path
+) -> None:
     """
     Pick a few genes based on cosine similarity and generate spatial distribution plots for them.
 
@@ -439,7 +499,7 @@ def generate_spatial_distribution_plots_for_some_genes(adata_z, adata_predicted_
     # Compute spatial distribution plots for 9 genes: 3 high / 3 medium / 3 low cossim (random within each bucket)
     np.random.seed(42)
     # safe cossim series
-    cossim_series = adata_predicted_z.var['cossim'].dropna()
+    cossim_series = adata_predicted_z.var["cossim"].dropna()
     all_genes = np.array(adata_z.var_names, dtype=str)
 
     # If too few genes overall, pick randomly
@@ -491,18 +551,25 @@ def generate_spatial_distribution_plots_for_some_genes(adata_z, adata_predicted_
 
     # Generate plots
     for gene in selected_genes:
-        cossim_val = float(adata_predicted_z.var.at[gene, 'cossim'])
-        output_path = metrics_folder_spatial_per_gene / f"{cossim_val:.2f}_{gene}_spatial_distribution.png"
+        cossim_val = float(adata_predicted_z.var.at[gene, "cossim"])
+        output_path = (
+            metrics_folder_spatial_per_gene
+            / f"{cossim_val:.2f}_{gene}_spatial_distribution.png"
+        )
         generate_gene_spatial_distribution_plot(
-            adata_z,
-            adata_predicted_z,
-            gene_name=gene,
-            output_path=output_path
+            adata_z, adata_predicted_z, gene_name=gene, output_path=output_path
         )
         # plot_delta_map(adata_z, adata_predicted_z, adata_z.var_names[0], show=True, mode="relative")
 
 
-def plot_delta_map(adata_z, adata_predicted_z, gene_name: str, mode: str = "relative", thresh: float = 1.0, show: bool = True):
+def plot_delta_map(
+    adata_z,
+    adata_predicted_z,
+    gene_name: str,
+    mode: str = "relative",
+    thresh: float = 1.0,
+    show: bool = True,
+):
     """
     Delta map for a gene: visualize pred - obs.
 
@@ -519,8 +586,13 @@ def plot_delta_map(adata_z, adata_predicted_z, gene_name: str, mode: str = "rela
     - thresh: minimum signal for visible spots (default 1.0). Set to 0 to show all spots.
     """
     # Ensure the gene exists
-    if gene_name not in adata_z.var_names or gene_name not in adata_predicted_z.var_names:
-        raise ValueError(f"Gene '{gene_name}' nicht in beiden AnnData-Objekten gefunden.")
+    if (
+        gene_name not in adata_z.var_names
+        or gene_name not in adata_predicted_z.var_names
+    ):
+        raise ValueError(
+            f"Gene '{gene_name}' nicht in beiden AnnData-Objekten gefunden."
+        )
 
     # Expression vectors per spot (1D)
     def vec_flat(adata, g):
@@ -531,13 +603,17 @@ def plot_delta_map(adata_z, adata_predicted_z, gene_name: str, mode: str = "rela
     vec_pred = vec_flat(adata_predicted_z, gene_name).astype(float)
 
     # Coordinates
-    if 'coords' not in adata_z.obsm or 'coords' not in adata_predicted_z.obsm:
-        raise ValueError("Räumliche Koordinaten (obsm['coords']) fehlen in einem der AnnData-Objekte.")
-    coords = np.asarray(adata_predicted_z.obsm['coords'])
+    if "coords" not in adata_z.obsm or "coords" not in adata_predicted_z.obsm:
+        raise ValueError(
+            "Räumliche Koordinaten (obsm['coords']) fehlen in einem der AnnData-Objekte."
+        )
+    coords = np.asarray(adata_predicted_z.obsm["coords"])
 
     # Check shapes
     if coords.shape[0] != vec_z.shape[0] or coords.shape[0] != vec_pred.shape[0]:
-        raise ValueError("Anzahl der Spots stimmt nicht mit der Länge der Expressionsvektoren überein.")
+        raise ValueError(
+            "Anzahl der Spots stimmt nicht mit der Länge der Expressionsvektoren überein."
+        )
 
     eps = 1e-9
     if mode == "absolute":
@@ -556,32 +632,54 @@ def plot_delta_map(adata_z, adata_predicted_z, gene_name: str, mode: str = "rela
         delta = (delta_raw - mu) / sigma
         label = "Z-scored delta (pred - obs)"
     else:
-        raise ValueError(f"Unbekannter mode='{mode}'. Erlaubt: 'relative', 'absolute', 'zscore'.")
+        raise ValueError(
+            f"Unbekannter mode='{mode}'. Erlaubt: 'relative', 'absolute', 'zscore'."
+        )
 
     # Mask for low-signal spots (these are drawn grey)
     mask_signal = np.maximum(np.abs(vec_pred), np.abs(vec_z)) >= thresh
 
     # Symmetric colormap range around 0
-    v = np.nanmax(np.abs(delta[mask_signal])) if np.any(mask_signal) else np.nanmax(np.abs(delta))
+    v = (
+        np.nanmax(np.abs(delta[mask_signal]))
+        if np.any(mask_signal)
+        else np.nanmax(np.abs(delta))
+    )
     if not np.isfinite(v) or v == 0:
         v = 1.0
 
     fig, ax = plt.subplots(figsize=(6, 5))
     # Background: all spots in light grey
-    ax.scatter(coords[:, 0], coords[:, 1], c='lightgrey', s=18, alpha=0.6, edgecolors='none')
+    ax.scatter(
+        coords[:, 0], coords[:, 1], c="lightgrey", s=18, alpha=0.6, edgecolors="none"
+    )
 
     # Draw low-signal spots (optionally smaller/faded)
     if np.any(~mask_signal):
-        ax.scatter(coords[~mask_signal, 0], coords[~mask_signal, 1],
-                   c='lightgrey', s=20, alpha=0.5, edgecolors='none')
+        ax.scatter(
+            coords[~mask_signal, 0],
+            coords[~mask_signal, 1],
+            c="lightgrey",
+            s=20,
+            alpha=0.5,
+            edgecolors="none",
+        )
 
     # Plot only the signal-bearing spots with diverging colormap
-    sc = ax.scatter(coords[mask_signal, 0], coords[mask_signal, 1],
-                    c=delta[mask_signal], cmap='RdBu_r', vmin=-v, vmax=v,
-                    s=40, edgecolors='k', linewidths=0.2)
+    sc = ax.scatter(
+        coords[mask_signal, 0],
+        coords[mask_signal, 1],
+        c=delta[mask_signal],
+        cmap="RdBu_r",
+        vmin=-v,
+        vmax=v,
+        s=40,
+        edgecolors="k",
+        linewidths=0.2,
+    )
 
     ax.set_title(f"Delta ({mode}): {gene_name}")
-    ax.set_aspect('equal')
+    ax.set_aspect("equal")
     cbar = plt.colorbar(sc, ax=ax, label=label)
     # supplementary info in the colorbar label
     if mode == "relative":
@@ -602,17 +700,25 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_output_folder: Path)
     Args:
         dataset_folder: Path to dataset folder
         result_gep: G x S predicted gene expression AnnData
-        metrics_output_folder: 
+        metrics_output_folder:
 
     Returns: None
     """
     logger.info("Compute metrics for o2")
 
     # Assemble file paths
-    metrics_folder_boxplots_per_gene = metrics_output_folder / "o2" / "boxplots_per_gene"
-    metrics_cossim_per_gene_json = metrics_output_folder / "o2" / "boxplots_per_gene" / "cossim.json"
-    metrics_folder_boxplots_per_spot = metrics_output_folder / "o2" / "boxplots_per_spot"
-    metrics_cossim_per_spot_json = metrics_output_folder / "o2" / "boxplots_per_spot" / "cossim.json"
+    metrics_folder_boxplots_per_gene = (
+        metrics_output_folder / "o2" / "boxplots_per_gene"
+    )
+    metrics_cossim_per_gene_json = (
+        metrics_output_folder / "o2" / "boxplots_per_gene" / "cossim.json"
+    )
+    metrics_folder_boxplots_per_spot = (
+        metrics_output_folder / "o2" / "boxplots_per_spot"
+    )
+    metrics_cossim_per_spot_json = (
+        metrics_output_folder / "o2" / "boxplots_per_spot" / "cossim.json"
+    )
     metrics_folder_spatial_per_gene = metrics_output_folder / "o2" / "spatial_per_gene"
     os.makedirs(metrics_folder_boxplots_per_gene, exist_ok=True)
     os.makedirs(metrics_folder_boxplots_per_spot, exist_ok=True)
@@ -622,31 +728,42 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_output_folder: Path)
     os.makedirs(metrics_folder_spatial_per_gene, exist_ok=True)
 
     # Load data (input ST and predicted)
-    adata_z, adata_predicted_z = get_z_real_and_predicted_data_only_shared_genes(dataset_folder, result_gep)
+    adata_z, adata_predicted_z = get_z_real_and_predicted_data_only_shared_genes(
+        dataset_folder, result_gep
+    )
 
     # Assert that both DataFrames have the same shape of genes and spots
-    assert adata_z.shape == adata_predicted_z.shape, "DataFrames haben unterschiedliche Formen."
+    assert (
+        adata_z.shape == adata_predicted_z.shape
+    ), "DataFrames haben unterschiedliche Formen."
 
     # Add spatial locations to AnnData objects
     coords_path = dataset_folder / "stData_Spots.csv"
     df_coords = pd.read_csv(coords_path, header=0, index_col=0)
     df_coords.index = df_coords.index.astype(str)
-    adata_z.obsm['coords'] = df_coords.loc[adata_z.obs_names, ['cArray0', 'cArray1']].to_numpy()
-    adata_predicted_z.obsm['coords'] = df_coords.loc[adata_z.obs_names, ['cArray0', 'cArray1']].to_numpy()
+    adata_z.obsm["coords"] = df_coords.loc[
+        adata_z.obs_names, ["cArray0", "cArray1"]
+    ].to_numpy()
+    adata_predicted_z.obsm["coords"] = df_coords.loc[
+        adata_z.obs_names, ["cArray0", "cArray1"]
+    ].to_numpy()
 
     # Compute and store cossim per gene in adata_predicted_z.var
-    compute_metrics_per_gene(adata_z, adata_predicted_z, save_cossim_json=metrics_cossim_per_gene_json)
+    compute_metrics_per_gene(
+        adata_z, adata_predicted_z, save_cossim_json=metrics_cossim_per_gene_json
+    )
 
     # generate_spatial_distribution_plots_for_some_genes(adata_z, adata_predicted_z, metrics_folder_spatial_per_gene)
 
     # Generate boxplot per gene
     generate_box_plot_metrics_per_gene(
-        adata_predicted_z,
-        output_folder=metrics_folder_boxplots_per_gene
+        adata_predicted_z, output_folder=metrics_folder_boxplots_per_gene
     )
 
     # Compute and store cossim per spot in adata_predicted_z.var
-    compute_metrics_per_spot(adata_z, adata_predicted_z, save_cossim_json=metrics_cossim_per_spot_json)
+    compute_metrics_per_spot(
+        adata_z, adata_predicted_z, save_cossim_json=metrics_cossim_per_spot_json
+    )
 
     # Generate boxplot per spot
     generate_box_plot_metrics_per_spot(

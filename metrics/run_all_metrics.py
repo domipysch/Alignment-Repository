@@ -9,10 +9,16 @@ from .metrics_o2 import main as main2
 from .metrics_o4 import main as main4
 from .metrics_o2_permutation_test import main as main2permutation
 from .metrics_o4_permutation_test import main as main4permutation
+
 logger = logging.getLogger(__name__)
 
 
-def main(dataset: Path, metrics: Path, result_gep: AnnData, run_permutation_tests: bool = False):
+def main(
+    dataset: Path,
+    metrics: Path,
+    result_gep: AnnData,
+    run_permutation_tests: bool = False,
+):
     """
 
     Args:
@@ -36,12 +42,18 @@ def main(dataset: Path, metrics: Path, result_gep: AnnData, run_permutation_test
 
 
 if __name__ == "__main__":
-    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        stream=sys.stdout,
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
 
     parser = argparse.ArgumentParser(description="Run all metrics on a result file")
-    parser.add_argument('-d', '--dataset', type=Path, help='Path to dataset folder')
-    parser.add_argument('-r', '--result', type=Path, help='Path to result file')
-    parser.add_argument('-m', '--metrics', type=Path, help='Path to output metric folder')
+    parser.add_argument("-d", "--dataset", type=Path, help="Path to dataset folder")
+    parser.add_argument("-r", "--result", type=Path, help="Path to result file")
+    parser.add_argument(
+        "-m", "--metrics", type=Path, help="Path to output metric folder"
+    )
 
     args = parser.parse_args()
 

@@ -1,12 +1,18 @@
 from typing import List, Dict
 import numpy as np
 import pandas as pd
-import scanpy as sc
 
 
 def cohens_d(a: np.ndarray, b: np.ndarray) -> float:
     """
-    Compute Cohen's d effect size between two 1D numpy arrays.
+    Compute Cohen's d effect size between two 1D arrays.
+
+    Args:
+        a: First sample as a 1D array.
+        b: Second sample as a 1D array.
+
+    Returns:
+        Cohen's d as a float (0.0 if pooled std is zero or either array is empty).
     """
     if a.size < 1 or b.size < 1:
         return 0.0
@@ -14,7 +20,7 @@ def cohens_d(a: np.ndarray, b: np.ndarray) -> float:
     ma, mb = a.mean(), b.mean()
     sa, sb = np.std(a), np.std(b)
 
-    denom = ( (na - 1) * (sa ** 2) + (nb - 1) * (sb ** 2) ) / (na + nb - 2)
+    denom = ((na - 1) * (sa**2) + (nb - 1) * (sb**2)) / (na + nb - 2)
     pooled_sd = np.sqrt(denom) if denom > 0 else 0.0
     if pooled_sd == 0:
         return 0.0
@@ -22,12 +28,30 @@ def cohens_d(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def compute_norm_per_vector(vectors_df: pd.DataFrame) -> np.ndarray:
-    norms = vectors_df.apply(lambda row: np.sqrt((row ** 2).sum()), axis=1)
+    """
+    Compute the L2 norm of each row in a DataFrame.
+
+    Args:
+        vectors_df: DataFrame of shape (n_vectors, n_dims).
+
+    Returns:
+        1D array of shape (n_vectors,) with the L2 norm of each row.
+    """
+    norms = vectors_df.apply(lambda row: np.sqrt((row**2).sum()), axis=1)
     return norms.astype(float).to_numpy()
 
 
 def compute_log_norm_per_vector(norm_vectors: np.ndarray) -> np.ndarray:
-    # log(0) behandeln -> -inf vermeiden, setze zu 0
+    """
+    Apply log to an array of norms, mapping non-positive values to 0 instead of -inf.
+
+    Args:
+        norm_vectors: 1D array of non-negative norm values.
+
+    Returns:
+        1D array of log-transformed norms, with log(x <= 0) replaced by 0.
+    """
+    # map log(0) -> 0 to avoid -inf
     with np.errstate(divide="ignore"):
         log_arr = np.where(norm_vectors <= 0, 0.0, np.log(norm_vectors))
     return log_arr
@@ -79,10 +103,9 @@ def compute_basic_metrics_for_gene_groups(
     include_norm_values: bool = False,
 ) -> Dict[str, float]:
     """
-    Genes x Cells/Spots.
-    First columns are gene IDs. First row are cell/spot IDs.
     Args:
-        gep: GEP matrix (genes x spots/cells) as pandas DataFrame
+        gep: GEP matrix of shape (genes x spots/cells) as a pandas DataFrame,
+             with gene IDs as the index and cell/spot IDs as column headers.
         marker_genes: List of marker gene names
         non_marker_genes: List of non-marker gene names
         include_norm_values: Whether to also return all norm values as lists
@@ -91,7 +114,9 @@ def compute_basic_metrics_for_gene_groups(
 
     # Get spot vectors per genes for marker and non-marker genes
     marker_vectors = gep.loc[gep.index.astype(str).str.strip().isin(marker_genes)]
-    non_marker_vectors = gep.loc[gep.index.astype(str).str.strip().isin(non_marker_genes)]
+    non_marker_vectors = gep.loc[
+        gep.index.astype(str).str.strip().isin(non_marker_genes)
+    ]
 
     # Compute basic metrics for both groups
     marker_metrics = compute_vector_metrics(marker_vectors)
@@ -123,4 +148,3 @@ def compute_basic_metrics_for_gene_groups(
         result_metrics["non_marker_norms"] = norms_non_marker.tolist()
 
     return result_metrics
-

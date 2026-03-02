@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import json
 import sys
 import argparse
+
 logger = logging.getLogger(__name__)
 
 
@@ -44,7 +45,13 @@ def compute_medians(paths_to_jsons: list[Path], labels: list[str]) -> dict:
     return medians
 
 
-def create_shared_boxplot(paths_to_jsons: list[Path], labls: list[str], title: str, ylabel: str, output_path: Path = None):
+def create_shared_boxplot(
+    paths_to_jsons: list[Path],
+    labls: list[str],
+    title: str,
+    ylabel: str,
+    output_path: Path = None,
+):
     """
     Create a combined boxplot from multiple JSON files.
     Values are extracted from each file and plotted as side-by-side boxplots.
@@ -91,7 +98,7 @@ def main(metrics_paths: list[Path], labels: list[str], output_folder: Path):
         labels,
         "o2 across runs",
         "Genewise cosine similarity",
-        output_path=output_folder / "o2_genewise_overall.png"
+        output_path=output_folder / "o2_genewise_overall.png",
     )
 
     # Create shared boxplot for o2, spotwise
@@ -100,7 +107,7 @@ def main(metrics_paths: list[Path], labels: list[str], output_folder: Path):
         labels,
         "o2 across runs",
         "Spotwise cosine similarity",
-        output_path=output_folder / "o2_spotwise_overall.png"
+        output_path=output_folder / "o2_spotwise_overall.png",
     )
 
     # Create shared boxplot for o4
@@ -109,17 +116,29 @@ def main(metrics_paths: list[Path], labels: list[str], output_folder: Path):
         labels,
         "o4 across runs",
         "Custom locality metric",
-        output_path=output_folder / "o4_overall.png"
+        output_path=output_folder / "o4_overall.png",
     )
 
 
 if __name__ == "__main__":
-    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        stream=sys.stdout,
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
 
-    parser = argparse.ArgumentParser(description="Create combined boxplots from multiple metric folders.")
-    parser.add_argument('-m', '--metrics', nargs="+", type=Path, help='Path to output metric folders')
-    parser.add_argument('-l', '--labels', nargs="+", type=str, help='Label for each box')
-    parser.add_argument('-o', '--output_folder', type=Path, help='Path to output folder')
+    parser = argparse.ArgumentParser(
+        description="Create combined boxplots from multiple metric folders."
+    )
+    parser.add_argument(
+        "-m", "--metrics", nargs="+", type=Path, help="Path to output metric folders"
+    )
+    parser.add_argument(
+        "-l", "--labels", nargs="+", type=str, help="Label for each box"
+    )
+    parser.add_argument(
+        "-o", "--output_folder", type=Path, help="Path to output folder"
+    )
     args = parser.parse_args()
 
     logger.info("Create shared boxplots for:")
@@ -130,8 +149,4 @@ if __name__ == "__main__":
     if len(args.metrics) != len(args.labels):
         raise ValueError("Anzahl der --paths muss gleich der Anzahl der --labels sein.")
 
-    main(
-        args.metrics,
-        args.labels,
-        args.output_folder
-    )
+    main(args.metrics, args.labels, args.output_folder)

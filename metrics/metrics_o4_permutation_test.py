@@ -11,13 +11,16 @@ from .metrics_o4 import create_spatial_graph, NeighborhoodType
 import json
 import sys
 import logging
+
 logger = logging.getLogger(__name__)
 
 
 NUM_PERMUTATIONS = 50
 
 
-def add_own_metrics_to_edges(adata_z: AnnData, adata_predicted_z: AnnData, graph: nx.Graph) -> nx.Graph:
+def add_own_metrics_to_edges(
+    adata_z: AnnData, adata_predicted_z: AnnData, graph: nx.Graph
+) -> nx.Graph:
 
     # helper to get dense 1D numpy array for a given spot id (obs_name)
     def _get_spot_vector(adata: AnnData, spot_id: str) -> np.ndarray:
@@ -48,19 +51,20 @@ def compute_permutation_test(edge_values: pd.DataFrame, output_folder: Path) -> 
     T_perm_values = []
     for _ in range(NUM_PERMUTATIONS):
         # Shuffle predicted values
-        shuffled_pred = edge_values["cossim_pred"].sample(frac=1, replace=False).reset_index(drop=True)
+        shuffled_pred = (
+            edge_values["cossim_pred"]
+            .sample(frac=1, replace=False)
+            .reset_index(drop=True)
+        )
         T_perm = np.sum(np.abs(edge_values["cossim_z"] - shuffled_pred))
         T_perm_values.append(T_perm)
 
     print(f"Completed {NUM_PERMUTATIONS}/{NUM_PERMUTATIONS} permutations (per spot).")
 
-    result = {
-        "T_original": T_actual,
-        "T_permuted": T_perm_values
-    }
+    result = {"T_original": T_actual, "T_permuted": T_perm_values}
 
     result_file = output_folder / "permutation_test.json"
-    with open(result_file, 'w') as f:
+    with open(result_file, "w") as f:
         json.dump(result, f)
 
 
@@ -74,7 +78,7 @@ def add_p_value_to_json(json_path):
     if not json_path.exists():
         raise FileNotFoundError(f"{json_path} does not exist")
 
-    with open(json_path, 'r') as f:
+    with open(json_path, "r") as f:
         data = json.load(f)
 
     if "p_value" in data:
@@ -96,7 +100,7 @@ def add_p_value_to_json(json_path):
     data["p_value"] = float(p_value)
 
     # overwrite file
-    with open(json_path, 'w') as f:
+    with open(json_path, "w") as f:
         json.dump(data, f)
 
     print(f"Added p_value={p_value:.6f} to {json_path}")
@@ -109,13 +113,19 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_folder_name: Path):
     os.makedirs(output_folder, exist_ok=True)
 
     # S x shared_genes
-    adata_z, adata_predicted_z = get_z_real_and_predicted_data_only_shared_genes(dataset_folder, result_gep)
+    adata_z, adata_predicted_z = get_z_real_and_predicted_data_only_shared_genes(
+        dataset_folder, result_gep
+    )
     # Assert that both DataFrames have the same shape of genes and spots
-    assert adata_z.shape == adata_predicted_z.shape, "DataFrames haben unterschiedliche Formen."
+    assert (
+        adata_z.shape == adata_predicted_z.shape
+    ), "DataFrames haben unterschiedliche Formen."
     assert adata_z.n_obs == result_gep.n_vars
 
     # KNN
-    graph = create_spatial_graph(dataset_folder, neighborhood_type=NeighborhoodType.KNN, k=4)
+    graph = create_spatial_graph(
+        dataset_folder, neighborhood_type=NeighborhoodType.KNN, k=4
+    )
     graph = add_own_metrics_to_edges(
         adata_z,
         adata_predicted_z,
@@ -139,12 +149,20 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_folder_name: Path):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        stream=sys.stdout,
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
 
-    parser = argparse.ArgumentParser(description="Run permutation test on custom metric 4")
-    parser.add_argument('-d', '--dataset', type=Path, help='Path to dataset folder')
-    parser.add_argument('-r', '--result', type=Path, help='Path to result file')
-    parser.add_argument('-m', '--metrics', type=Path, help='Path to output metric folder')
+    parser = argparse.ArgumentParser(
+        description="Run permutation test on custom metric 4"
+    )
+    parser.add_argument("-d", "--dataset", type=Path, help="Path to dataset folder")
+    parser.add_argument("-r", "--result", type=Path, help="Path to result file")
+    parser.add_argument(
+        "-m", "--metrics", type=Path, help="Path to output metric folder"
+    )
     args = parser.parse_args()
 
     main(args.dataset, args.result, args.metrics)

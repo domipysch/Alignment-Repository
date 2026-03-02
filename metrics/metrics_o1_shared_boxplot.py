@@ -4,7 +4,9 @@ import matplotlib.pyplot as plt
 import json
 
 
-def create_marker_nonmarker_boxplot(json_paths, output_path, pair_labels=None, title=None, eps=1e-8):
+def create_marker_nonmarker_boxplot(
+    json_paths, output_path, pair_labels=None, title=None, eps=1e-8
+):
     """
     Erwartet genau 4 JSON-Dateien (je Datei: {"marker_norms": [...], "non_marker_norms": [...]})
     Erzeugt einen Boxplot mit 8 Boxen: für jede Datei (Paar) Marker then Non‑Marker.
@@ -25,15 +27,17 @@ def create_marker_nonmarker_boxplot(json_paths, output_path, pair_labels=None, t
     n_pairs = 4
     positions = np.arange(1, 2 * n_pairs + 1)
     fig, ax = plt.subplots(figsize=(12, 6))
-    bp = ax.boxplot(data, positions=positions, widths=0.6, patch_artist=True, showfliers=False)
+    bp = ax.boxplot(
+        data, positions=positions, widths=0.6, patch_artist=True, showfliers=False
+    )
 
     # Farben: Marker (even indices 0,2,..) vs Non-Marker (odd)
     marker_color = "#1f77b4"
     non_marker_color = "#ff7f0e"
-    for i, box in enumerate(bp['boxes']):
+    for i, box in enumerate(bp["boxes"]):
         box.set_facecolor(marker_color if i % 2 == 0 else non_marker_color)
         box.set_alpha(0.7)
-    for median in bp.get('medians', []):
+    for median in bp.get("medians", []):
         median.set_color("black")
 
     # x-ticks in die Mitte jeder Pair (1.5, 3.5, 5.5, 7.5)
@@ -50,8 +54,11 @@ def create_marker_nonmarker_boxplot(json_paths, output_path, pair_labels=None, t
 
     # Legende mit farbigen Rechtecken
     from matplotlib.patches import Patch
-    legend_handles = [Patch(facecolor=marker_color, label="Marker"),
-                      Patch(facecolor=non_marker_color, label="Non-Marker")]
+
+    legend_handles = [
+        Patch(facecolor=marker_color, label="Marker"),
+        Patch(facecolor=non_marker_color, label="Non-Marker"),
+    ]
     ax.legend(handles=legend_handles, loc="upper right")
 
     outp = Path(output_path)
@@ -79,5 +86,5 @@ if __name__ == "__main__":
         paths,
         out_path,
         pair_labels=pair_labels,
-        title="Euclidean L2 Norm of Marker vs Non-Marker Gene Expressions"
+        title="Euclidean L2 Norm of Marker vs Non-Marker Gene Expressions",
     )

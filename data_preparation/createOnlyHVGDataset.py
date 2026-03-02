@@ -1,7 +1,10 @@
+# Creates a derived dataset containing only the top N highly variable genes (HVGs)
+# from the scRNA-seq data. ST data files are copied unchanged. Shared genes that are
+# not among the top HVGs are appended to the selection to preserve cross-modal overlap.
+
 import os
 import pandas as pd
 import anndata as ad
-import numpy as np
 from scipy.sparse import issparse
 import scanpy as sc
 
@@ -9,8 +12,11 @@ import scanpy as sc
 def load_sc_adata(dataset_folder: str, cell_type_keys: list[str]) -> ad.AnnData:
     """
     Load single-cell data from dataset folder into an AnnData object.
+
     Args:
-        dataset_folder: Absolute path to dataset folder
+        dataset_folder: Absolute path to dataset folder.
+        cell_type_keys: List of column names in scData_Cells.csv to load as cell annotations.
+
     Returns:
         ad.AnnData: Single-cell AnnData object (C x G)
     """
@@ -28,8 +34,10 @@ def load_sc_adata(dataset_folder: str, cell_type_keys: list[str]) -> ad.AnnData:
 def load_st_adata(dataset_folder: str) -> ad.AnnData:
     """
     Load ST data from dataset folder into an AnnData object.
+
     Args:
-        dataset_folder: Absolute path to dataset folder
+        dataset_folder: Absolute path to dataset folder.
+
     Returns:
         ad.AnnData: ST AnnData object (S x G)
     """
@@ -42,11 +50,12 @@ def load_st_adata(dataset_folder: str) -> ad.AnnData:
     return adata_st
 
 
-
 if __name__ == "__main__":
 
     dataset_from = "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_Datasets/03_MouseSSP"
-    dataset_to = "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_Datasets/03_MouseSSP_HVG_2000"
+    dataset_to = (
+        "/Users/domi/Dev/MPA_Workspace/MPA_DATA/01_Datasets/03_MouseSSP_HVG_2000"
+    )
     N = 2000
 
     """ Create dataset from full scRNA + ST dataset """
@@ -71,17 +80,22 @@ if __name__ == "__main__":
     sc.pp.highly_variable_genes(scDataLog, n_top_genes=N, inplace=True)
 
     # Collect HVG gene names (var_names where 'highly_variable' is True)
-    assert 'highly_variable' in scDataLog.var.columns
-    hvgs = list(scDataLog.var_names[scDataLog.var['highly_variable'].values])
+    assert "highly_variable" in scDataLog.var.columns
+    hvgs = list(scDataLog.var_names[scDataLog.var["highly_variable"].values])
 
     if len(hvgs) == 0:
         raise RuntimeError("No HVGs selected — check input data and N value")
 
     for sharedGene in sharedGenes:
         if sharedGene not in hvgs:
-            print(f"Warning: Shared gene {sharedGene} not selected as HVG - added manually")
+            print(
+                f"Warning: Shared gene {sharedGene} not selected as HVG - added manually"
+            )
             hvgs.append(sharedGene)
-    print(f"Appended {len(hvgs) - N} shared genes to HVG list. Total genes selected:", len(hvgs))
+    print(
+        f"Appended {len(hvgs) - N} shared genes to HVG list. Total genes selected:",
+        len(hvgs),
+    )
 
     # 4. Create mini scRNA dataset
     scData_HVG = scData[:, hvgs]

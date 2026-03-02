@@ -6,6 +6,7 @@ import pandas as pd
 import logging
 from ...utils.io import csv_to_anndata
 import matplotlib.pyplot as plt
+
 logger = logging.getLogger(__name__)
 
 
@@ -80,13 +81,22 @@ def graph_type_from_config(graph_cfg: Dict) -> SpatialGraphType:
     if t == "delaunay":
         return SpatialGraphType.DELAUNAY
 
-    raise ValueError(f"Unsupported graph.type: '{graph_type}'. Expected one of: knn, mutual_knn, radius, delaunay.")
+    raise ValueError(
+        f"Unsupported graph.type: '{graph_type}'. Expected one of: knn, mutual_knn, radius, delaunay."
+    )
 
 
 def dump_loss_logs(losses, config_path) -> dict:
 
     losses_after_last_epoch = {}
-    for comp in ("rec_spot", "rec_gene", "rec_state", "clust", "state_entropy", "spot_entropy"):
+    for comp in (
+        "rec_spot",
+        "rec_gene",
+        "rec_state",
+        "clust",
+        "state_entropy",
+        "spot_entropy",
+    ):
         comp_vals = losses.get(comp, {})
         val = None
         if isinstance(comp_vals, dict):
@@ -96,7 +106,9 @@ def dump_loss_logs(losses, config_path) -> dict:
                 val = vals_list[-1]
 
         # Round unweighted final value to 2 decimals for clarity (handle None)
-        losses_after_last_epoch[f"{comp}"] = round(float(val), 2) if val is not None else None
+        losses_after_last_epoch[f"{comp}"] = (
+            round(float(val), 2) if val is not None else None
+        )
 
     loss_dir = config_path.parent / "loss"
     loss_dir.mkdir(parents=True, exist_ok=True)
@@ -115,13 +127,49 @@ def create_loss_plots(losses, loss_dir):
     plt.figure()
     # Plot individual components + total
     epochs = list(range(len(losses["total-weighted"])))
-    plt.plot(epochs, losses["total-weighted"], label="total-weighted", linewidth=2, color="black")
-    plt.plot(epochs, list(v * losses["rec_spot"]["weight"] for v in losses["rec_spot"]["values"]), label="rec_spot-weighted")
-    plt.plot(epochs, list(v * losses["rec_gene"]["weight"] for v in losses["rec_gene"]["values"]), label="rec_gene-weighted")
-    plt.plot(epochs, list(v * losses["rec_state"]["weight"] for v in losses["rec_state"]["values"]), label="rec_state-weighted")
-    plt.plot(epochs, list(v * losses["clust"]["weight"] for v in losses["clust"]["values"]), label="clust-weighted")
-    plt.plot(epochs, list(v * losses["state_entropy"]["weight"] for v in losses["state_entropy"]["values"]), label="state_entropy-weighted")
-    plt.plot(epochs, list(v * losses["spot_entropy"]["weight"] for v in losses["spot_entropy"]["values"]), label="spot_entropy-weighted")
+    plt.plot(
+        epochs,
+        losses["total-weighted"],
+        label="total-weighted",
+        linewidth=2,
+        color="black",
+    )
+    plt.plot(
+        epochs,
+        list(v * losses["rec_spot"]["weight"] for v in losses["rec_spot"]["values"]),
+        label="rec_spot-weighted",
+    )
+    plt.plot(
+        epochs,
+        list(v * losses["rec_gene"]["weight"] for v in losses["rec_gene"]["values"]),
+        label="rec_gene-weighted",
+    )
+    plt.plot(
+        epochs,
+        list(v * losses["rec_state"]["weight"] for v in losses["rec_state"]["values"]),
+        label="rec_state-weighted",
+    )
+    plt.plot(
+        epochs,
+        list(v * losses["clust"]["weight"] for v in losses["clust"]["values"]),
+        label="clust-weighted",
+    )
+    plt.plot(
+        epochs,
+        list(
+            v * losses["state_entropy"]["weight"]
+            for v in losses["state_entropy"]["values"]
+        ),
+        label="state_entropy-weighted",
+    )
+    plt.plot(
+        epochs,
+        list(
+            v * losses["spot_entropy"]["weight"]
+            for v in losses["spot_entropy"]["values"]
+        ),
+        label="spot_entropy-weighted",
+    )
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Loss Curve (components + total)")
@@ -135,7 +183,14 @@ def create_loss_plots(losses, loss_dir):
     num_epochs = len(losses.get("total-weighted", []))
 
     # Components (order for plotting)
-    components = ("rec_spot", "rec_gene", "rec_state", "clust", "state_entropy", "spot_entropy")
+    components = (
+        "rec_spot",
+        "rec_gene",
+        "rec_state",
+        "clust",
+        "state_entropy",
+        "spot_entropy",
+    )
 
     # Ensure epochs list is available
     epochs = list(range(num_epochs))
@@ -155,6 +210,3 @@ def create_loss_plots(losses, loss_dir):
         plt.savefig(str(out_path))
         plt.close()
         logger.info(f"Saved per-loss plot to {out_path}")
-
-
-

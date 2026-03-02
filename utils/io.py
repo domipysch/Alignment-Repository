@@ -8,13 +8,19 @@ from anndata import AnnData
 
 def csv_to_anndata(csv_path: Path, transpose: bool) -> AnnData:
     """
-    Lädt `csv_path` und gibt ein AnnData zurück.
+    Load a CSV file and return it as an AnnData object.
+
+    Args:
+        csv_path: Path to the input CSV file.
+        transpose: Whether to transpose the data after loading
     """
     df = pd.read_csv(csv_path, header=0, index_col=0)
     if transpose:
         df = df.T
     X = np.asarray(df.values)
-    ad = AnnData(X=X, obs=pd.DataFrame(index=df.index), var=pd.DataFrame(index=df.columns))
+    ad = AnnData(
+        X=X, obs=pd.DataFrame(index=df.index), var=pd.DataFrame(index=df.columns)
+    )
     ad.obs_names = list(df.index)
     ad.var_names = list(df.columns)
     return ad
@@ -28,14 +34,15 @@ def anndata_to_csv(
     uppercase_var_names: bool = False,
 ):
     """
-    Schreibt ein AnnData zu CSV.
-    - `top_left_label` wird als Eintrag 0,0 (index_label) verwendet
-    - `format_func` (optional): wird elementweise via `DataFrame.applymap` angewandt
-    - `uppercase_var_names`: optional Gene-Namen groß schreiben (wie im Beispiel)
-    Gibt das (ggf. formatierte) DataFrame zurück.
+    Write an AnnData object to a CSV file.
+
+    Args:
+        top_left_label: Value used as the index label (top-left cell of the CSV).
+        format_func: Optional element-wise formatting function applied via DataFrame.map.
+        uppercase_var_names: If True, obs_names (row index) are uppercased before writing.
     """
 
-    # Load matrix
+    # Extract dense matrix from AnnData (X: obs × var)
     X = adata.X
     if issparse(X):
         X = X.toarray()
@@ -58,4 +65,3 @@ def anndata_to_csv(
     # Write CSV with custom top-left label
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
     df_out.to_csv(output_path, index=True, index_label=top_left_label)
-

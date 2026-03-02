@@ -5,12 +5,11 @@ import pandas as pd
 import scanpy as sc
 import numpy as np
 import logging
-
 from anndata import AnnData
-
 from utils import load_sc_adata, load_st_adata, fmt_nonzero_4
 import argparse
 from scipy.sparse import issparse
+
 logger = logging.getLogger(__name__)
 
 
@@ -55,8 +54,15 @@ def tangram_align_data(
         adata_sc_copy = adata_sc.copy()
 
         # Filter out cell types with only one cell for marker gene computation
-        singletons = adata_sc_copy.obs['cell_subclass'].value_counts().loc[lambda x: x == 1].index.tolist()
-        adata_sc_copy = adata_sc_copy[~adata_sc_copy.obs['cell_subclass'].isin(singletons)].copy()
+        singletons = (
+            adata_sc_copy.obs["cell_subclass"]
+            .value_counts()
+            .loc[lambda x: x == 1]
+            .index.tolist()
+        )
+        adata_sc_copy = adata_sc_copy[
+            ~adata_sc_copy.obs["cell_subclass"].isin(singletons)
+        ].copy()
 
         # Proposed in Tangram tutorials: normalize & log transform first
         sc.pp.normalize_total(adata_sc_copy)
@@ -64,7 +70,9 @@ def tangram_align_data(
 
         # Create list of names of marker genes
         sc.tl.rank_genes_groups(adata_sc_copy, groupby="cell_subclass", use_raw=False)
-        markers_df = pd.DataFrame(adata_sc_copy.uns["rank_genes_groups"]["names"]).iloc[0:100, :]
+        markers_df = pd.DataFrame(adata_sc_copy.uns["rank_genes_groups"]["names"]).iloc[
+            0:100, :
+        ]
         markers: list[str] = list(np.unique(markers_df.melt().value.values))
 
     adata_sc_map = adata_sc.copy()
@@ -92,21 +100,21 @@ def tangram_align_data(
             adata_sc_map,
             adata_st,
             mode="clusters",
-            cluster_label='cell_subclass', # .obs field w cell types
-            density_prior='rna_count_based',
+            cluster_label="cell_subclass",  # .obs field w cell types
+            density_prior="rna_count_based",
             num_epochs=500,
-            device='cpu',
+            device="cpu",
         )  # T x S
-        assert ad_map.n_obs == len(adata_sc_map.obs['cell_subclass'].unique())
+        assert ad_map.n_obs == len(adata_sc_map.obs["cell_subclass"].unique())
         assert ad_map.n_vars == adata_st.n_obs
     else:
         ad_map = tg.map_cells_to_space(
             adata_sc_map,
             adata_st,
             mode="cells",
-            density_prior='rna_count_based',
+            density_prior="rna_count_based",
             num_epochs=500,
-            device='cpu',
+            device="cpu",
             lambda_g1=1,
             # lambda_g2=1,
         )  # C x S
@@ -114,24 +122,26 @@ def tangram_align_data(
         assert ad_map.n_vars == adata_st.n_obs
 
     # Step 4 (optional): Apply one-hot encoding to mapping: Only one cell / cell type per spot
-    logger.info("Apply deterministic mapping" if deterministic_mapping else "Keep probabilistic mapping")
+    logger.info(
+        "Apply deterministic mapping"
+        if deterministic_mapping
+        else "Keep probabilistic mapping"
+    )
     if deterministic_mapping:
         # For each column (spot) in ad_map, set the max value to 1 and all others to 0 (map spot to exactly one cell)
         if issparse(ad_map.X):
             mat = ad_map.X.toarray()
         else:
             mat = ad_map.X.copy()
-        argmax_idx = np.argmax(mat, axis=0)  # for each spot (column), index of max cell / cell type
+        argmax_idx = np.argmax(
+            mat, axis=0
+        )  # for each spot (column), index of max cell / cell type
         one_hot = np.zeros_like(mat, dtype=float)
         one_hot[argmax_idx, np.arange(mat.shape[1])] = 1.0
         ad_map.X = one_hot
 
     # Optional: Store mapping matrix to CSV for inspection
-    df_map = pd.DataFrame(
-        ad_map.X,
-        index=ad_map.obs_names,
-        columns=ad_map.var_names
-    )
+    df_map = pd.DataFrame(ad_map.X, index=ad_map.obs_names, columns=ad_map.var_names)
     df_map.to_csv(str(output_path).replace("_GEP", "_mapping"))
 
     # Step 5: Compute Z' out of the mapping (expected gene expression per spot, scRNA data weighted by mapping)
@@ -139,7 +149,7 @@ def tangram_align_data(
     ad_ge = tg.project_genes(
         adata_map=ad_map,
         adata_sc=adata_sc,
-        cluster_label="cell_subclass" if map_clusters else None
+        cluster_label="cell_subclass" if map_clusters else None,
     )  # S x G
 
     # Transpose to G x S
@@ -178,14 +188,30 @@ if __name__ == "__main__":
     Settings can be modified in the code below.
     """
     # Configure basic logging
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     logger = logging.getLogger(__name__)
 
-    parser = argparse.ArgumentParser(description="Run Tangram alignment on a dataset folder")
-    parser.add_argument('-d', '--dataset', type=str, help='Path to dataset folder')
-    parser.add_argument('-o', '--output_path', type=str, help='Path where to store result')
-    parser.add_argument('-nal', '--normalize_and_log', action='store_true', help='Whether to normalize and log input data beforehand')
-    parser.add_argument('-det', '--deterministic', action='store_true', help='Whether to apply argmax to mapping')
+    parser = argparse.ArgumentParser(
+        description="Run Tangram alignment on a dataset folder"
+    )
+    parser.add_argument("-d", "--dataset", type=str, help="Path to dataset folder")
+    parser.add_argument(
+        "-o", "--output_path", type=str, help="Path where to store result"
+    )
+    parser.add_argument(
+        "-nal",
+        "--normalize_and_log",
+        action="store_true",
+        help="Whether to normalize and log input data beforehand",
+    )
+    parser.add_argument(
+        "-det",
+        "--deterministic",
+        action="store_true",
+        help="Whether to apply argmax to mapping",
+    )
     args = parser.parse_args()
 
     tangram_align_data(

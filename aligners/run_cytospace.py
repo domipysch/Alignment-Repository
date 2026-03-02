@@ -54,8 +54,12 @@ def cytospace_align_data(dataset_folder: str):
 
     # Step 4: Create binary matrix of assigned locations
     # Rows: CellID, Columns: SpotID, Values: 1 if Cell assigned to Spot, else 0
-    assigned_matrix_df = pd.crosstab(assigned_locations_df["OriginalCID"], assigned_locations_df["SpotID"])
-    assigned_matrix_df = assigned_matrix_df.reindex(index=scRNA_df.columns, columns=st_df.index, fill_value=0)
+    assigned_matrix_df = pd.crosstab(
+        assigned_locations_df["OriginalCID"], assigned_locations_df["SpotID"]
+    )
+    assigned_matrix_df = assigned_matrix_df.reindex(
+        index=scRNA_df.columns, columns=st_df.index, fill_value=0
+    )
 
     # Step 5: Multiply scRNA GEP with assigned matrix to get spot GEPs
     cytospace_GEP_df = scRNA_df.dot(assigned_matrix_df)
@@ -74,11 +78,20 @@ if __name__ == "__main__":
     Settings can be modified in the code below.
     """
     # Configure basic logging
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
     logger = logging.getLogger(__name__)
 
-    parser = argparse.ArgumentParser(description="Run Tangram alignment on a dataset folder")
-    parser.add_argument('-d', '--dataset', dest='dataset', type=str,
-                        help='Path to dataset folder (default: development workspace mouse cortex)')
+    parser = argparse.ArgumentParser(
+        description="Run Tangram alignment on a dataset folder"
+    )
+    parser.add_argument(
+        "-d",
+        "--dataset",
+        dest="dataset",
+        type=str,
+        help="Path to dataset folder (default: development workspace mouse cortex)",
+    )
     args = parser.parse_args()
     cytospace_align_data(args.dataset)

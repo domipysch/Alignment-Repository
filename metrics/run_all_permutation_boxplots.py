@@ -2,6 +2,7 @@ import argparse, json, sys
 from pathlib import Path
 import matplotlib.pyplot as plt
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -69,10 +70,13 @@ def main(metrics_paths, labels, output_folder):
 
     # Create shared boxplot for permutation test o2
     combined_boxplot(
-        [path / "o2" / "permutation_test" / "permutation_test_per_gene.json" for path in metrics_paths],
+        [
+            path / "o2" / "permutation_test" / "permutation_test_per_gene.json"
+            for path in metrics_paths
+        ],
         labels,
         "o2 permutation test across runs",
-        output_folder / "o2_permutation.png"
+        output_folder / "o2_permutation.png",
     )
 
     # Create shared boxplot for permutation test o4
@@ -80,17 +84,29 @@ def main(metrics_paths, labels, output_folder):
         [path / "o4" / "knn" / "permutation_test.json" for path in metrics_paths],
         labels,
         "o4 permutation test across runs",
-        output_folder / "o4_permutation.png"
+        output_folder / "o4_permutation.png",
     )
 
 
 if __name__ == "__main__":
-    logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        stream=sys.stdout,
+        level=logging.INFO,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
 
-    parser = argparse.ArgumentParser(description="Create boxplots for permutation test results (single JSON per call)")
-    parser.add_argument('-m', '--metrics', nargs="+", type=Path, help='Path to output metric folders')
-    parser.add_argument('-l', '--labels', nargs="+", type=str, help='Label for each box')
-    parser.add_argument('-o', '--output_folder', type=Path, help='Path to output folder')
+    parser = argparse.ArgumentParser(
+        description="Create boxplots for permutation test results (single JSON per call)"
+    )
+    parser.add_argument(
+        "-m", "--metrics", nargs="+", type=Path, help="Path to output metric folders"
+    )
+    parser.add_argument(
+        "-l", "--labels", nargs="+", type=str, help="Label for each box"
+    )
+    parser.add_argument(
+        "-o", "--output_folder", type=Path, help="Path to output folder"
+    )
     args = parser.parse_args()
 
     logger.info("Create shared permutation boxplots for:")

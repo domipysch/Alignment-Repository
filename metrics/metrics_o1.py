@@ -10,6 +10,7 @@ from anndata import AnnData
 from scipy import sparse
 from .utils.utils import compute_basic_metrics_for_gene_groups
 from .utils.dataset_query import get_shared_genes
+
 logger = logging.getLogger(__name__)
 
 
@@ -72,7 +73,9 @@ def compute_metrics_o1(dataset_folder: Path, result_gep: AnnData) -> Dict[str, f
     )
 
 
-def create_norms_histograms(metrics_result: Dict, out_path: Path = None, bins: int = 50, show: bool = False):
+def create_norms_histograms(
+    metrics_result: Dict, out_path: Path = None, bins: int = 50, show: bool = False
+):
     """
     Erzeugt eine einzige Abbildung mit zwei nebeneinander stehenden Histogrammen (PNG):
     links: marker_norms, rechts: non_marker_norms.
@@ -113,7 +116,9 @@ def create_norms_histograms(metrics_result: Dict, out_path: Path = None, bins: i
     plt.close(fig)
 
 
-def create_log_norms_histograms(metrics_result: Dict, out_path: Path = None, bins: int = 50, show: bool = False):
+def create_log_norms_histograms(
+    metrics_result: Dict, out_path: Path = None, bins: int = 50, show: bool = False
+):
     """
     Erzeugt eine einzige Abbildung mit zwei nebeneinander stehenden Histogrammen (PNG) der Log-Normen:
     links: marker_log_norms, rechts: non_marker_log_norms.
@@ -162,7 +167,9 @@ def create_log_norms_histograms(metrics_result: Dict, out_path: Path = None, bin
     plt.close(fig)
 
 
-def create_norms_boxplots(metrics_result: Dict, out_path: Path = None, show: bool = False):
+def create_norms_boxplots(
+    metrics_result: Dict, out_path: Path = None, show: bool = False
+):
     """
     Erzeugt eine Abbildung mit zwei nebeneinander stehenden Boxplots:
     links: marker_norms, rechts: non_marker_norms.
@@ -175,9 +182,13 @@ def create_norms_boxplots(metrics_result: Dict, out_path: Path = None, show: boo
 
     # Marker boxplot (links)
     if marker_norms.size > 0:
-        axes[0].boxplot(marker_norms, vert=True, patch_artist=True,
-                        boxprops=dict(facecolor="C0", color="black"),
-                        medianprops=dict(color="black"))
+        axes[0].boxplot(
+            marker_norms,
+            vert=True,
+            patch_artist=True,
+            boxprops=dict(facecolor="C0", color="black"),
+            medianprops=dict(color="black"),
+        )
         axes[0].set_ylabel("Norm")
     else:
         axes[0].text(0.5, 0.5, "no data", ha="center", va="center")
@@ -186,9 +197,13 @@ def create_norms_boxplots(metrics_result: Dict, out_path: Path = None, show: boo
 
     # Non-marker boxplot (rechts)
     if non_marker_norms.size > 0:
-        axes[1].boxplot(non_marker_norms, vert=True, patch_artist=True,
-                        boxprops=dict(facecolor="C1", color="black"),
-                        medianprops=dict(color="black"))
+        axes[1].boxplot(
+            non_marker_norms,
+            vert=True,
+            patch_artist=True,
+            boxprops=dict(facecolor="C1", color="black"),
+            medianprops=dict(color="black"),
+        )
     else:
         axes[1].text(0.5, 0.5, "no data", ha="center", va="center")
     axes[1].set_title("Non-marker genes - norms (boxplot)")
@@ -202,7 +217,9 @@ def create_norms_boxplots(metrics_result: Dict, out_path: Path = None, show: boo
     plt.close(fig)
 
 
-def create_log_norms_boxplots(metrics_result: Dict, out_path: Path = None, show: bool = False):
+def create_log_norms_boxplots(
+    metrics_result: Dict, out_path: Path = None, show: bool = False
+):
     """
     Erzeugt eine Abbildung mit zwei nebeneinander stehenden Boxplots der Log-Normen:
     links: marker_log_norms, rechts: non_marker_log_norms.
@@ -224,9 +241,13 @@ def create_log_norms_boxplots(metrics_result: Dict, out_path: Path = None, show:
 
     # Marker log-boxplot (links)
     if marker_log.size > 0:
-        axes[0].boxplot(marker_log, vert=True, patch_artist=True,
-                        boxprops=dict(facecolor="C0", color="black"),
-                        medianprops=dict(color="black"))
+        axes[0].boxplot(
+            marker_log,
+            vert=True,
+            patch_artist=True,
+            boxprops=dict(facecolor="C0", color="black"),
+            medianprops=dict(color="black"),
+        )
         axes[0].set_ylabel("log(Norm)")
     else:
         axes[0].text(0.5, 0.5, "no data", ha="center", va="center")
@@ -235,9 +256,13 @@ def create_log_norms_boxplots(metrics_result: Dict, out_path: Path = None, show:
 
     # Non-marker log-boxplot (rechts)
     if non_marker_log.size > 0:
-        axes[1].boxplot(non_marker_log, vert=True, patch_artist=True,
-                        boxprops=dict(facecolor="C1", color="black"),
-                        medianprops=dict(color="black"))
+        axes[1].boxplot(
+            non_marker_log,
+            vert=True,
+            patch_artist=True,
+            boxprops=dict(facecolor="C1", color="black"),
+            medianprops=dict(color="black"),
+        )
     else:
         axes[1].text(0.5, 0.5, "no data", ha="center", va="center")
     axes[1].set_title("Non-marker genes - log(norm) (boxplot)")
@@ -252,7 +277,12 @@ def create_log_norms_boxplots(metrics_result: Dict, out_path: Path = None, show:
     plt.close(fig)
 
 
-def main(dataset_folder: Path, result_gep: AnnData, metrics_output_path: Path, compute_scRNA_metrics: bool = False):
+def main(
+    dataset_folder: Path,
+    result_gep: AnnData,
+    metrics_output_path: Path,
+    compute_scRNA_metrics: bool = False,
+):
     """
     Compute metrics for objective 1 and save results as JSON files / Diagrams.
 
@@ -284,7 +314,9 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_output_path: Path, c
                 json.loads(
                     json.dumps(
                         to_save,
-                        default=lambda o: o.tolist() if hasattr(o, "tolist") else float(o)
+                        default=lambda o: (
+                            o.tolist() if hasattr(o, "tolist") else float(o)
+                        ),
                     )
                 ),
                 fh,
@@ -300,26 +332,22 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_output_path: Path, c
             res_scrna,
             out_path=scrna_dir / "scRNA_norms_histogram.png",
             show=False,
-            bins=100
+            bins=100,
         )
 
         create_log_norms_histograms(
             res_scrna,
             out_path=scrna_dir / "scRNA_log_norms_histogram.png",
             show=False,
-            bins=100
+            bins=100,
         )
 
         create_norms_boxplots(
-            res_scrna,
-            out_path=scrna_dir / "scRNA_norms_boxplot.png",
-            show=False
+            res_scrna, out_path=scrna_dir / "scRNA_norms_boxplot.png", show=False
         )
 
         create_log_norms_boxplots(
-            res_scrna,
-            out_path=scrna_dir / "scRNA_log_norms_boxplot.png",
-            show=False
+            res_scrna, out_path=scrna_dir / "scRNA_log_norms_boxplot.png", show=False
         )
 
     # Compute metrics for o1
@@ -337,7 +365,7 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_output_path: Path, c
             json.loads(
                 json.dumps(
                     to_save,
-                    default=lambda o: o.tolist() if hasattr(o, "tolist") else float(o)
+                    default=lambda o: o.tolist() if hasattr(o, "tolist") else float(o),
                 )
             ),
             fh,
@@ -346,28 +374,15 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_output_path: Path, c
 
     # Crate some diagrams on o1 metrics
     create_norms_histograms(
-        res,
-        out_path=metrics_dir / "norms_histogram.png",
-        show=False,
-        bins=100
+        res, out_path=metrics_dir / "norms_histogram.png", show=False, bins=100
     )
 
     create_log_norms_histograms(
-        res,
-        out_path=metrics_dir / "log_norms_histogram.png",
-        show=False,
-        bins=100
+        res, out_path=metrics_dir / "log_norms_histogram.png", show=False, bins=100
     )
 
-    create_norms_boxplots(
-        res,
-        out_path=metrics_dir / "norms_boxplot.png",
-        show=False
-    )
+    create_norms_boxplots(res, out_path=metrics_dir / "norms_boxplot.png", show=False)
 
     create_log_norms_boxplots(
-        res,
-        out_path=metrics_dir / "log_norms_boxplot.png",
-        show=False
+        res, out_path=metrics_dir / "log_norms_boxplot.png", show=False
     )
-

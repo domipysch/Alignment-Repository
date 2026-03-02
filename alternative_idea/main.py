@@ -3,7 +3,6 @@ import sys
 import os
 from pathlib import Path
 from typing import Optional
-
 import pandas as pd
 import yaml
 import scanpy as sc
@@ -11,14 +10,20 @@ import torch
 import torch.optim as optim
 import logging
 from anndata import AnnData
-from MPA_Code.utils.io import anndata_to_csv
-from MPA_Code.alternative_idea.src.utils import load_sc_adata, load_st_adata, fmt_nonzero_4, create_loss_plots, \
-    dump_loss_logs
-from MPA_Code.alternative_idea.src.model import AlternativeIdeaModel
-from MPA_Code.alternative_idea.src.loss import AlternativeIdeaLoss
-from MPA_Code.alternative_idea.src.spatial_graph import build_spatial_graph, SpatialGraphType
-from MPA_Code.alternative_idea.src.dataset import prepare_tensors_from_input
-from MPA_Code.alternative_idea.src.utils import graph_type_from_config
+from ..utils.io import anndata_to_csv
+from .src.utils import (
+    load_sc_adata,
+    load_st_adata,
+    fmt_nonzero_4,
+    create_loss_plots,
+    dump_loss_logs,
+)
+from .src.model import AlternativeIdeaModel
+from .src.loss import AlternativeIdeaLoss
+from .src.spatial_graph import build_spatial_graph, SpatialGraphType
+from .src.dataset import prepare_tensors_from_input
+from .src.utils import graph_type_from_config
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,13 +42,19 @@ def load_config(config_path: Path) -> tuple[dict, dict, dict, dict, dict]:
         required_sections = ["mapping", "graph", "model", "training", "loss_weights"]
         missing_sections = [s for s in required_sections if s not in cfg]
         if missing_sections:
-            raise ValueError(f"Missing required config sections: {', '.join(missing_sections)}")
+            raise ValueError(
+                f"Missing required config sections: {', '.join(missing_sections)}"
+            )
 
         mapping_cfg = cfg.get("mapping") if isinstance(cfg.get("mapping"), dict) else {}
         graph_cfg = cfg.get("graph") if isinstance(cfg.get("graph"), dict) else {}
         model_cfg = cfg.get("model") if isinstance(cfg.get("model"), dict) else {}
-        training_cfg = cfg.get("training") if isinstance(cfg.get("training"), dict) else {}
-        loss_weights_cfg = cfg.get("loss_weights") if isinstance(cfg.get("loss_weights"), dict) else {}
+        training_cfg = (
+            cfg.get("training") if isinstance(cfg.get("training"), dict) else {}
+        )
+        loss_weights_cfg = (
+            cfg.get("loss_weights") if isinstance(cfg.get("loss_weights"), dict) else {}
+        )
 
         # Validate mapping config
         if not mapping_cfg:
@@ -57,16 +68,22 @@ def load_config(config_path: Path) -> tuple[dict, dict, dict, dict, dict]:
             raise ValueError("`graph` must be a mapping in the config.")
         graph_type = graph_cfg.get("type")
         if not isinstance(graph_type, str):
-            raise ValueError("`graph.type` must be specified as a string (e.g. 'knn', 'mutual_knn', 'radius').")
+            raise ValueError(
+                "`graph.type` must be specified as a string (e.g. 'knn', 'mutual_knn', 'radius')."
+            )
         graph_type_l = graph_type.lower()
         if graph_type_l in ("knn", "mutual_knn"):
             if "k" not in graph_cfg:
-                raise ValueError(f"`graph.k` must be specified for graph.type='{graph_type}'.")
+                raise ValueError(
+                    f"`graph.k` must be specified for graph.type='{graph_type}'."
+                )
             if not isinstance(graph_cfg["k"], int) or graph_cfg["k"] <= 0:
                 raise ValueError("`graph.k` must be a positive integer.")
         elif graph_type_l == "radius":
             if "radius" not in graph_cfg:
-                raise ValueError("`graph.radius` must be specified for graph.type='radius'.")
+                raise ValueError(
+                    "`graph.radius` must be specified for graph.type='radius'."
+                )
             try:
                 radius_val = float(graph_cfg["radius"])
                 if radius_val <= 0:
@@ -79,8 +96,7 @@ def load_config(config_path: Path) -> tuple[dict, dict, dict, dict, dict]:
             raise ValueError("`model` must be a mapping in the config.")
         for key in ("d", "K", "enc_hidden_dim", "dec_hidden_dim"):
             if key not in model_cfg:
-                raise ValueError(
-                    f"`model.{key}` is required in the config.")
+                raise ValueError(f"`model.{key}` is required in the config.")
 
         # Validate training config
         if not training_cfg:
@@ -91,7 +107,9 @@ def load_config(config_path: Path) -> tuple[dict, dict, dict, dict, dict]:
         # Optional normalize_and_log flag: default True (preserve previous behavior)
         if "normalize_and_log" in training_cfg:
             if not isinstance(training_cfg["normalize_and_log"], bool):
-                raise ValueError("`training.normalize_and_log` must be a boolean if provided.")
+                raise ValueError(
+                    "`training.normalize_and_log` must be a boolean if provided."
+                )
         else:
             training_cfg["normalize_and_log"] = True
 
@@ -113,7 +131,9 @@ def alternative_idea_compute_mapping(
 
     # 1. Load Config
     logger.debug(f"Load config: {path_to_config}")
-    mapping_config, graph_config, model_config, training_config, loss_weights = load_config(path_to_config)
+    mapping_config, graph_config, model_config, training_config, loss_weights = (
+        load_config(path_to_config)
+    )
     logger.info(f"Loaded config: {path_to_config}")
     logger.debug(f"Loaded training config: {training_config}")
     logger.debug(f"Loaded model config: {model_config}")
@@ -129,7 +149,9 @@ def alternative_idea_compute_mapping(
         sc.pp.log1p(adata_sc)
         sc.pp.log1p(adata_st)
     else:
-        logger.info("Skipping normalize_and_log as per config (training.normalize_and_log=false)")
+        logger.info(
+            "Skipping normalize_and_log as per config (training.normalize_and_log=false)"
+        )
 
     # 4. Convert input anndata to tensors
     logger.debug("Prepare input tensors for model...")
@@ -139,7 +161,11 @@ def alternative_idea_compute_mapping(
 
     # 5. Build the spatial graph out of Z
     graph_type = graph_type_from_config(graph_config)
-    k = graph_config["k"] if graph_type in (SpatialGraphType.KNN, SpatialGraphType.MUTUAL_KNN) else None
+    k = (
+        graph_config["k"]
+        if graph_type in (SpatialGraphType.KNN, SpatialGraphType.MUTUAL_KNN)
+        else None
+    )
     radius = graph_config["radius"] if graph_type == SpatialGraphType.RADIUS else None
     edge_index = build_spatial_graph(
         adata_st,
@@ -194,30 +220,12 @@ def alternative_idea_compute_mapping(
     # Collect per-epoch losses for plotting: individual components + total
     losses = {
         "total-weighted": [],
-        "rec_spot": {
-            "weight": loss_weights["lambda_rec_spot"],
-            "values": []
-        },
-        "rec_gene": {
-            "weight": loss_weights["lambda_rec_gene"],
-            "values": []
-        },
-        "rec_state": {
-            "weight": loss_weights["lambda_rec_state"],
-            "values": []
-        },
-        "clust": {
-            "weight": loss_weights["lambda_clust"],
-            "values": []
-        },
-        "state_entropy": {
-            "weight": loss_weights["lambda_state_entropy"],
-            "values": []
-        },
-        "spot_entropy": {
-            "weight": loss_weights["lambda_spot_entropy"],
-            "values": []
-        }
+        "rec_spot": {"weight": loss_weights["lambda_rec_spot"], "values": []},
+        "rec_gene": {"weight": loss_weights["lambda_rec_gene"], "values": []},
+        "rec_state": {"weight": loss_weights["lambda_rec_state"], "values": []},
+        "clust": {"weight": loss_weights["lambda_clust"], "values": []},
+        "state_entropy": {"weight": loss_weights["lambda_state_entropy"], "values": []},
+        "spot_entropy": {"weight": loss_weights["lambda_spot_entropy"], "values": []},
     }
 
     def to_scalar(t):
@@ -241,14 +249,7 @@ def alternative_idea_compute_mapping(
 
         # Calculate segmented losses
         loss_dict = loss(
-            A=A,
-            B=B,
-            h=h,
-            M_rec=M_rec,
-            F=F,
-            X=X,
-            X_shared=X_shared,
-            Z_shared=Z_shared
+            A=A, B=B, h=h, M_rec=M_rec, F=F, X=X, X_shared=X_shared, Z_shared=Z_shared
         )
 
         total_loss = loss_dict["loss"]
@@ -257,15 +258,20 @@ def alternative_idea_compute_mapping(
         if epoch % 100 == 0:
             logger.debug(f"\n--- Gradient Analysis (Epoch {epoch}) ---")
             for name, loss_val in loss_dict.items():
-                if name == "loss": continue
+                if name == "loss":
+                    continue
 
                 # Temporäre Gradientenberechnung für diesen spezifischen Term
                 model.zero_grad()
                 loss_val.backward(retain_graph=True)
 
                 # Berechne die Norm über alle trainierbaren Gewichte
-                grad_norm = torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1000)
-                logger.debug(f"Term: {name:15} | Loss: {loss_val.item():.4f} | Grad-Norm: {grad_norm:.4f}")
+                grad_norm = torch.nn.utils.clip_grad_norm_(
+                    model.parameters(), max_norm=1000
+                )
+                logger.debug(
+                    f"Term: {name:15} | Loss: {loss_val.item():.4f} | Grad-Norm: {grad_norm:.4f}"
+                )
 
             # Reset für den eigentlichen Backprop
             model.zero_grad()
@@ -280,8 +286,12 @@ def alternative_idea_compute_mapping(
         losses["rec_gene"]["values"].append(to_scalar(loss_dict.get("rec_gene")))
         losses["rec_state"]["values"].append(to_scalar(loss_dict.get("rec_state")))
         losses["clust"]["values"].append(to_scalar(loss_dict.get("clust")))
-        losses["state_entropy"]["values"].append(to_scalar(loss_dict.get("state_entropy")))
-        losses["spot_entropy"]["values"].append(to_scalar(loss_dict.get("spot_entropy")))
+        losses["state_entropy"]["values"].append(
+            to_scalar(loss_dict.get("state_entropy"))
+        )
+        losses["spot_entropy"]["values"].append(
+            to_scalar(loss_dict.get("spot_entropy"))
+        )
 
         # Logging: verbose -> log every epoch at DEBUG, normal -> log every 10 epochs at INFO
         if verbose_logging:
@@ -320,18 +330,17 @@ def alternative_idea_compute_mapping(
         A_thresh = A.detach().cpu().clone()
         A_thresh[A_thresh < 0.1] = 0.0
         df_weight = pd.DataFrame(A_thresh.numpy())
-        df_weight.to_csv(folder_intermediate / 'A_thresh.csv', index=False)
+        df_weight.to_csv(folder_intermediate / "A_thresh.csv", index=False)
 
         B_thresh = B.detach().cpu().clone()
         B_thresh[B_thresh < 0.1] = 0.0
         df_weight = pd.DataFrame(B_thresh.numpy())
-        df_weight.to_csv(folder_intermediate / 'B_thresh.csv', index=False)
+        df_weight.to_csv(folder_intermediate / "B_thresh.csv", index=False)
 
         C_thresh = C.detach().cpu().clone()
         C_thresh[C_thresh < 0.1] = 0.0
         df_weight = pd.DataFrame(C_thresh.numpy())
-        df_weight.to_csv(folder_intermediate / 'C_thresh.csv', index=False)
-
+        df_weight.to_csv(folder_intermediate / "C_thresh.csv", index=False)
 
         # idx = torch.argmax(A, dim=1, keepdim=True)
         # A_argmax = torch.zeros_like(A).scatter_(1, idx, 1.0)
@@ -346,7 +355,9 @@ def alternative_idea_compute_mapping(
         # pd.DataFrame(C_argmax.detach().cpu().numpy()).to_csv(folder_intermediate / "C_argmax.csv", index=False)
 
         p = torch.mean(B, dim=0)
-        pd.DataFrame(p.detach().cpu().numpy()).to_csv(folder_intermediate / "p.csv", index=False)
+        pd.DataFrame(p.detach().cpu().numpy()).to_csv(
+            folder_intermediate / "p.csv", index=False
+        )
 
         # B_normalized = B / (torch.sum(B, dim=0) + 1e-6)  # (K x C)
         # df_weight = pd.DataFrame(B_normalized.detach().cpu().numpy())
@@ -375,7 +386,7 @@ def alternative_idea_compute_mapping(
             B_argmax = torch.zeros_like(B)
             B_argmax.scatter_(1, argmax_idx, 1.0)
             df_weight = pd.DataFrame(B_argmax.detach().cpu().numpy())
-            df_weight.to_csv(folder_intermediate / 'B_argmax.csv', index=False)
+            df_weight.to_csv(folder_intermediate / "B_argmax.csv", index=False)
 
             # C: Argmax per spot -> One-hot pro Zeile
             C_argmax = torch.matmul(A, B_argmax)
@@ -383,8 +394,7 @@ def alternative_idea_compute_mapping(
             C_argmax = torch.zeros_like(C_argmax)
             C_argmax.scatter_(1, argmax_idx, 1.0)
             df_weight = pd.DataFrame(C_argmax.detach().cpu().numpy())
-            df_weight.to_csv(folder_intermediate / 'C_argmax.csv', index=False)
-
+            df_weight.to_csv(folder_intermediate / "C_argmax.csv", index=False)
 
     logger.info("Alignment complete.")
     return A, B, losses
@@ -400,12 +410,13 @@ def compute_gene_expression_prediction(
     use_cm: bool,
 ) -> AnnData:
 
-    adata_sc_tensor = torch.as_tensor(adata_sc.X, dtype=torch.float32, device=torch_device)
+    adata_sc_tensor = torch.as_tensor(
+        adata_sc.X, dtype=torch.float32, device=torch_device
+    )
 
     if deterministic_mapping:
 
-        # Leave A is it is
-        pass
+        # A: Leave as it is
 
         # B: Argmax per cell -> One-hot pro Zeile
         argmax_idx = torch.argmax(cell_to_cell_type, dim=1, keepdim=True)
@@ -423,18 +434,27 @@ def compute_gene_expression_prediction(
         C = torch.matmul(spot_to_cell_map, cell_to_cell_type)  # S x T
 
     if use_cm:
-        logger.info("Using CM for final mapping output as per config (training.use_cm=true)")
+        logger.info(
+            "Using CM for final mapping output as per config (training.use_cm=true)"
+        )
         # Compute M = B_normalized^T @ X
-        B_normalized = cell_to_cell_type / (torch.sum(cell_to_cell_type, dim=0) + 1e-6)  # (K x C)
+        B_normalized = cell_to_cell_type / (
+            torch.sum(cell_to_cell_type, dim=0) + 1e-6
+        )  # (K x C)
         M = torch.matmul(B_normalized.t(), adata_sc_tensor)  # T x G
         # Compute Z' = C @ M
         predicted_spot_expressions = torch.matmul(C, M)  # S x G
     else:
-        predicted_spot_expressions = torch.matmul(spot_to_cell_map, adata_sc_tensor)  # S x G
+        predicted_spot_expressions = torch.matmul(
+            spot_to_cell_map, adata_sc_tensor
+        )  # S x G
 
     # Transpose to G x S
     predicted_spot_expressions = predicted_spot_expressions.T  # now G x S
-    assert predicted_spot_expressions.shape == (adata_sc.n_vars, adata_st.n_obs), "dims passen nicht"
+    assert predicted_spot_expressions.shape == (
+        adata_sc.n_vars,
+        adata_st.n_obs,
+    ), "dims passen nicht"
 
     # Create AnnData object for predicted spot expressions
     adata_result = AnnData(X=predicted_spot_expressions.detach().cpu().numpy())
@@ -450,7 +470,7 @@ def main(
     output_path: Optional[Path],
     mapping_output_path: Optional[Path] = None,
     store_intermediate: bool = False,
-    verbose_logging: bool = False
+    verbose_logging: bool = False,
 ) -> tuple[AnnData, Optional[AnnData], dict]:
 
     mapping_config, _, _, training_config, _ = load_config(config_path)
@@ -481,7 +501,10 @@ def main(
         save_intermediate=store_intermediate,
     )  # S x C, plus loss history
     logger.info("Obtained spot-to-cell mapping AnnData.")
-    assert spot_to_cell_map.shape == (adata_st.n_obs, adata_sc.n_obs), "dims passen nicht"
+    assert spot_to_cell_map.shape == (
+        adata_st.n_obs,
+        adata_sc.n_obs,
+    ), "dims passen nicht"
 
     # Step 3.1: Save end values of loss terms (value after last epoch) to a csv file
     losses_after_last_epoch = dump_loss_logs(losses, config_path)
@@ -534,7 +557,9 @@ def main(
     # Step 6 (optional): Apply one-hot encoding to mapping & repeat steps 4 & 5
     adata_prediction_det = None
     if mapping_config["deterministic"]:
-        logger.info("Apply deterministic mapping & compute prediction with one-hot encoded mapping")
+        logger.info(
+            "Apply deterministic mapping & compute prediction with one-hot encoded mapping"
+        )
 
         adata_prediction_det = compute_gene_expression_prediction(
             spot_to_cell_map,
@@ -549,7 +574,9 @@ def main(
         if output_path is not None:
 
             # Edit output_path: append "_deterministic" before file extension
-            output_path_deterministic = output_path.with_name(output_path.stem + "_deterministic" + output_path.suffix)
+            output_path_deterministic = output_path.with_name(
+                output_path.stem + "_deterministic" + output_path.suffix
+            )
 
             logger.info(f"Write result GEP to CSV: {output_path_deterministic}")
             anndata_to_csv(
@@ -570,18 +597,48 @@ def main(
 if __name__ == "__main__":
 
     # Parse Arguments
-    parser = argparse.ArgumentParser(description="Run AlternativeIdea alignment on a dataset folder")
-    parser.add_argument('-d', '--dataset', dest='dataset', type=Path, help='Path to dataset folder')
-    parser.add_argument('-c', '--config', dest='config', type=Path, help='Path to config.yaml')
-    parser.add_argument('-o', '--output_path', dest='output_path', type=Path, required=False, default=None, help='Path where to store result to')
-    parser.add_argument('-mo', '--mapping_output_path', type=Path, required=False, default=None, help='Path where to store mapping CSV to')
-    parser.add_argument('--logging', dest='logging', choices=['normal', 'verbose'], default='normal',
-                        help="Logging verbosity. Use 'verbose' for more logs.")
+    parser = argparse.ArgumentParser(
+        description="Run AlternativeIdea alignment on a dataset folder"
+    )
+    parser.add_argument(
+        "-d", "--dataset", dest="dataset", type=Path, help="Path to dataset folder"
+    )
+    parser.add_argument(
+        "-c", "--config", dest="config", type=Path, help="Path to config.yaml"
+    )
+    parser.add_argument(
+        "-o",
+        "--output_path",
+        dest="output_path",
+        type=Path,
+        required=False,
+        default=None,
+        help="Path where to store result to",
+    )
+    parser.add_argument(
+        "-mo",
+        "--mapping_output_path",
+        type=Path,
+        required=False,
+        default=None,
+        help="Path where to store mapping CSV to",
+    )
+    parser.add_argument(
+        "--logging",
+        dest="logging",
+        choices=["normal", "verbose"],
+        default="normal",
+        help="Logging verbosity. Use 'verbose' for more logs.",
+    )
     args = parser.parse_args()
 
     # Configure logging based on argument
     level = logging.DEBUG if args.logging == "verbose" else logging.INFO
-    logging.basicConfig(stream=sys.stdout, level=level, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        stream=sys.stdout,
+        level=level,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    )
     logger.setLevel(level)
 
     # Run alignment

@@ -6,6 +6,7 @@ import multiprocessing as mp
 import logging
 from anndata import AnnData
 from .utils.dataset_query import get_z_real_and_predicted_data_only_shared_genes
+
 logger = logging.getLogger(__name__)
 
 
@@ -48,8 +49,14 @@ def _compute_T_for_permutation(permuted_indices):
 def permutation_test_per_gene(adata_z, adata_predicted_z, output_folder: Path) -> None:
 
     # Convert to numpy arrays (handles sparse matrices)
-    z_matrix = adata_z.X.toarray() if hasattr(adata_z.X, "toarray") else np.asarray(adata_z.X)
-    pred_matrix = adata_predicted_z.X.toarray() if hasattr(adata_predicted_z.X, "toarray") else np.asarray(adata_predicted_z.X)
+    z_matrix = (
+        adata_z.X.toarray() if hasattr(adata_z.X, "toarray") else np.asarray(adata_z.X)
+    )
+    pred_matrix = (
+        adata_predicted_z.X.toarray()
+        if hasattr(adata_predicted_z.X, "toarray")
+        else np.asarray(adata_predicted_z.X)
+    )
 
     z_norms = np.linalg.norm(z_matrix, axis=0)
     # original T:
@@ -66,11 +73,17 @@ def permutation_test_per_gene(adata_z, adata_predicted_z, output_folder: Path) -
 
     # Start pool and initialize workers (each matrix is sent once per worker)
     cpu_count = max(1, os.cpu_count() or 1)
-    with mp.Pool(processes=cpu_count, initializer=_init_worker, initargs=(z_matrix, pred_matrix, z_norms)) as pool:
+    with mp.Pool(
+        processes=cpu_count,
+        initializer=_init_worker,
+        initargs=(z_matrix, pred_matrix, z_norms),
+    ) as pool:
         # map the permutations to the workers
         T_permuted = pool.map(_compute_T_for_permutation, permutations)
 
-    logging.info(f"Completed {NUM_PERMUTATIONS}/{NUM_PERMUTATIONS} permutations (per gene).")
+    logging.info(
+        f"Completed {NUM_PERMUTATIONS}/{NUM_PERMUTATIONS} permutations (per gene)."
+    )
 
     # compute empirical p-value (one-sided: prob T_perm >= T_original) ---
     greater_equal_count = sum(1 for t in T_permuted if t >= T_original)
@@ -86,7 +99,7 @@ def permutation_test_per_gene(adata_z, adata_predicted_z, output_folder: Path) -
 
     # Save result as json
     result_file = output_folder / "permutation_test_per_gene.json"
-    with open(result_file, 'w') as f:
+    with open(result_file, "w") as f:
         json.dump(result, f)
 
 
@@ -123,8 +136,14 @@ def _compute_T_for_permutation_spot(permuted_gene_indices):
 def permutation_test_per_spot(adata_z, adata_predicted_z, output_folder: Path) -> None:
 
     # Convert to numpy arrays (handles sparse matrices)
-    z_matrix = adata_z.X.toarray() if hasattr(adata_z.X, "toarray") else np.asarray(adata_z.X)
-    pred_matrix = adata_predicted_z.X.toarray() if hasattr(adata_predicted_z.X, "toarray") else np.asarray(adata_predicted_z.X)
+    z_matrix = (
+        adata_z.X.toarray() if hasattr(adata_z.X, "toarray") else np.asarray(adata_z.X)
+    )
+    pred_matrix = (
+        adata_predicted_z.X.toarray()
+        if hasattr(adata_predicted_z.X, "toarray")
+        else np.asarray(adata_predicted_z.X)
+    )
 
     # norms per spot (rows)
     z_norms = np.linalg.norm(z_matrix, axis=1)
@@ -140,27 +159,31 @@ def permutation_test_per_spot(adata_z, adata_predicted_z, output_folder: Path) -
     permutations = [np.random.permutation(n_genes) for _ in range(NUM_PERMUTATIONS)]
 
     cpu_count = max(1, os.cpu_count() or 1)
-    with mp.Pool(processes=cpu_count, initializer=_init_worker_spot, initargs=(z_matrix, pred_matrix, z_norms)) as pool:
+    with mp.Pool(
+        processes=cpu_count,
+        initializer=_init_worker_spot,
+        initargs=(z_matrix, pred_matrix, z_norms),
+    ) as pool:
         T_permuted = pool.map(_compute_T_for_permutation_spot, permutations)
 
-    logging.info(f"Completed {NUM_PERMUTATIONS}/{NUM_PERMUTATIONS} permutations (per spot).")
+    logging.info(
+        f"Completed {NUM_PERMUTATIONS}/{NUM_PERMUTATIONS} permutations (per spot)."
+    )
 
     # compute empirical p-value (one-sided: prob T_perm >= T_original) ---
     greater_equal_count = sum(1 for t in T_permuted if t >= T_original)
     p_value = (greater_equal_count + 1) / (len(T_permuted) + 1)  # +1 for continuity
     logging.info(f"Empirical p-value (per gene, one-sided >=): {p_value:.3f}")
 
-    result = {
-        "p_value": p_value,
-        "T_original": T_original,
-        "T_permuted": T_permuted
-    }
+    result = {"p_value": p_value, "T_original": T_original, "T_permuted": T_permuted}
 
     result_file = output_folder / "permutation_test_per_spot.json"
-    with open(result_file, 'w') as f:
+    with open(result_file, "w") as f:
         json.dump(result, f)
 
+
 # ------------- Main and helper functions
+
 
 def add_p_value_to_json(json_path):
     """
@@ -172,7 +195,7 @@ def add_p_value_to_json(json_path):
     if not json_path.exists():
         raise FileNotFoundError(f"{json_path} does not exist")
 
-    with open(json_path, 'r') as f:
+    with open(json_path, "r") as f:
         data = json.load(f)
 
     if "p_value" in data:
@@ -194,7 +217,7 @@ def add_p_value_to_json(json_path):
     data["p_value"] = float(p_value)
 
     # overwrite file
-    with open(json_path, 'w') as f:
+    with open(json_path, "w") as f:
         json.dump(data, f)
 
     logging.info(f"Added p_value={p_value:.6f} to {json_path}")
@@ -207,10 +230,14 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_folder_name: Path):
     os.makedirs(result_folder_permutation, exist_ok=True)
 
     # Load data (S x shared G)
-    adata_z, adata_predicted_z = get_z_real_and_predicted_data_only_shared_genes(dataset_folder, result_gep)
+    adata_z, adata_predicted_z = get_z_real_and_predicted_data_only_shared_genes(
+        dataset_folder, result_gep
+    )
 
     # Assert that both DataFrames have the same shape of genes and spots
-    assert adata_z.shape == adata_predicted_z.shape, "DataFrames haben unterschiedliche Formen."
+    assert (
+        adata_z.shape == adata_predicted_z.shape
+    ), "DataFrames haben unterschiedliche Formen."
     assert adata_z.n_obs == result_gep.n_vars
 
     permutation_test_per_gene(adata_z, adata_predicted_z, result_folder_permutation)
@@ -218,4 +245,3 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_folder_name: Path):
 
     add_p_value_to_json(result_folder_permutation / "permutation_test_per_gene.json")
     # add_p_value_to_json(result_folder_permutation / "permutation_test_per_spot.json")
-

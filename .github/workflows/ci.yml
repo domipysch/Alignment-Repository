@@ -23,4 +23,4 @@ jobs:
         run: black --check .
 
       - name: Type check (mypy)
-        run: mypy alternative_idea metrics data_preparation utils
+        run: mypy src/alternative_idea src/metrics src/data_preparation src/utils

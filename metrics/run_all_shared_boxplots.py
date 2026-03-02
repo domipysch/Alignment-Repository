@@ -13,7 +13,7 @@ def compute_medians(paths_to_jsons: list[Path], labels: list[str]) -> dict:
     """
     Compute the median of numeric values contained in each JSON file.
     """
-    medians = {}
+    medians: dict[str, float | None] = {}
     for path, label in zip(paths_to_jsons, labels):
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -50,7 +50,7 @@ def create_shared_boxplot(
     labls: list[str],
     title: str,
     ylabel: str,
-    output_path: Path = None,
+    output_path: Path | None = None,
 ):
     """
     Create a combined boxplot from multiple JSON files.

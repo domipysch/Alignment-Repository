@@ -4,7 +4,7 @@ from .spatial_graph import SpatialGraphType
 import anndata as ad
 import pandas as pd
 import logging
-from ...utils.io import csv_to_anndata
+from Code.utils.io import csv_to_anndata
 import matplotlib.pyplot as plt
 
 logger = logging.getLogger(__name__)

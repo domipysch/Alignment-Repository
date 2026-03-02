@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 def compute_metrics_per_gene(
-    adata_z, adata_predicted_z, save_cossim_json: Path = None
+    adata_z, adata_predicted_z, save_cossim_json: Path | None = None
 ) -> None:
     """
     Compute cosine similarity (or other distance metrics) per gene and write results directly into
@@ -98,7 +98,7 @@ def compute_metrics_per_gene(
 
 
 def compute_metrics_per_spot(
-    adata_z, adata_predicted_z, save_cossim_json: Path = None
+    adata_z, adata_predicted_z, save_cossim_json: Path | None = None
 ) -> None:
     """
     Compute cosine similarity (or other distance metrics) per spot and write results directly into
@@ -161,7 +161,9 @@ def compute_metrics_per_spot(
 
 
 def generate_box_plot_metrics_per_gene(
-    adata_predicted_z, output_folder: Path = None, columns: list[str] = None
+    adata_predicted_z,
+    output_folder: Path | None = None,
+    columns: list[str] | None = None,
 ) -> None:
     """
     Generate boxplots for numeric metrics in adata_predicted_z.var.
@@ -207,7 +209,7 @@ def generate_box_plot_metrics_per_gene(
         fig, ax = plt.subplots(1, 1, figsize=(width, 5), constrained_layout=True)
         bp = ax.boxplot(
             data_unit,
-            labels=unit_cols,
+            tick_labels=unit_cols,
             patch_artist=True,
             medianprops=dict(color="black"),
         )
@@ -237,7 +239,10 @@ def generate_box_plot_metrics_per_gene(
             ax.set_xticks([])
         else:
             bp = ax.boxplot(
-                vals, labels=[col], patch_artist=True, medianprops=dict(color="black")
+                vals,
+                tick_labels=[col],
+                patch_artist=True,
+                medianprops=dict(color="black"),
             )
             box_color = "#a6cee3"
             for patch in bp["boxes"]:
@@ -256,7 +261,9 @@ def generate_box_plot_metrics_per_gene(
 
 
 def generate_box_plot_metrics_per_spot(
-    adata_predicted_z, output_folder: Path = None, columns: list[str] = None
+    adata_predicted_z,
+    output_folder: Path | None = None,
+    columns: list[str] | None = None,
 ) -> None:
     """
     Generate boxplots for numeric metrics in adata_predicted_z.obs.
@@ -302,7 +309,7 @@ def generate_box_plot_metrics_per_spot(
         fig, ax = plt.subplots(1, 1, figsize=(width, 5), constrained_layout=True)
         bp = ax.boxplot(
             data_unit,
-            labels=unit_cols,
+            tick_labels=unit_cols,
             patch_artist=True,
             medianprops=dict(color="black"),
         )
@@ -334,7 +341,10 @@ def generate_box_plot_metrics_per_spot(
             ax.set_xticks([])
         else:
             bp = ax.boxplot(
-                vals, labels=[col], patch_artist=True, medianprops=dict(color="black")
+                vals,
+                tick_labels=[col],
+                patch_artist=True,
+                medianprops=dict(color="black"),
             )
             box_color = "#a6cee3"
             for patch in bp["boxes"]:
@@ -399,7 +409,7 @@ def generate_gene_spatial_distribution_plot(
             "Anzahl der Spots stimmt nicht mit der Länge der Expressionsvektoren überein."
         )
 
-    cmap = plt.cm.viridis
+    cmap = plt.cm.get_cmap("viridis")
 
     # --- increased font sizes ---
     suptitle_fs = 14

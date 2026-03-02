@@ -13,9 +13,9 @@ In general, the workflow followed these steps:
 2) Alignment: Running various alignment algorithms on the prepared datasets in several settings (prob. vs det. mapping, cell state granularity, etc.).
 3) Evaluation: Computing metrics to evaluate the quality of the alignments produced by different methods.
 
-When running the alignment methods, the results got written to the `results_xxx/` folder 
-within each datasets directory. 
-Evaluation metrics were then computed based on these results and stored in the `metrics_xxx/` folder 
+When running the alignment methods, the results got written to the `results_xxx/` folder
+within each datasets directory.
+Evaluation metrics were then computed based on these results and stored in the `metrics_xxx/` folder
 within each datasets directory.
 
 ## Installation & Running
@@ -25,3 +25,7 @@ different conda environments were created for each method.
 
 todo. files zum erstellen der environments nachstellen
 
+## TODO
+
+- Tests
+- Build installable package when ready (maybe extract only our alignment method code for that? or also with evaluation?)

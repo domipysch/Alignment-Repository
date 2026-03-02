@@ -1,0 +1,10 @@
+[tool.black]
+line-length = 88
+target-version = ["py313"]
+exclude = "00_Playground"
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+disable_error_code = ["import-untyped"]
+exclude = ["00_Playground"]

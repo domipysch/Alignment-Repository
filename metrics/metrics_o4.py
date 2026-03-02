@@ -1,4 +1,5 @@
 import enum
+from typing import Any
 import os
 from pathlib import Path
 import pandas as pd
@@ -45,7 +46,7 @@ def create_spatial_graph(
     dataset_folder: Path,
     neighborhood_type: NeighborhoodType = NeighborhoodType.KNN,
     k: int = 4,
-    radius: float = None,
+    radius: float | None = None,
 ) -> nx.Graph:
     """
     Read stData_Spots.csv and build a networkx.Graph with one node per spot (node attribute 'pos').
@@ -249,7 +250,7 @@ def binary_adjacency_matrix_from_graph(
 def locality_matrix(
     dataset_folder: Path,
     method: str = "rbf",  # "rbf", "linear", "inverse"
-    sigma: float = None,  # used for 'rbf'; if None inferred from data
+    sigma: float | None = None,  # used for 'rbf'; if None inferred from data
     dtype=np.float32,
 ) -> pd.DataFrame:
     """
@@ -384,7 +385,7 @@ def compute_tangram_refined_metric_3(
     adata_z: AnnData,
     adata_predicted_z: AnnData,
     dataset_folder: Path,
-    save_gog_json: Path = None,
+    save_gog_json: Path | None = None,
 ) -> pd.DataFrame:
     """
     Compute the Getis-Ord G* statistic for each spot (in the order adata_z.obs_names).
@@ -456,7 +457,7 @@ def visualize_tangram_refined_metrics(
     metric_1_df: pd.DataFrame,
     metric_3_df: pd.DataFrame,
     figsize: tuple = (10, 4),
-    output_folder: Path = None,
+    output_folder: Path | None = None,
 ) -> None:
     """
     Show two subplots side-by-side:
@@ -504,7 +505,7 @@ def visualize_tangram_refined_metrics(
     bp_left = axes[0].boxplot(
         data_left, labels=labels_left, patch_artist=True, notch=False
     )
-    colors_left = cm.viridis(np.linspace(0.25, 0.6, len(data_left)))
+    colors_left = cm.get_cmap("viridis")(np.linspace(0.25, 0.6, len(data_left)))
     for patch, color in zip(bp_left.get("boxes", []), colors_left):
         patch.set_facecolor(color)
         patch.set_alpha(0.8)
@@ -525,7 +526,7 @@ def visualize_tangram_refined_metrics(
     # Right: gog single boxplot
     bp_right = axes[1].boxplot([s_gog], labels=["gog"], patch_artist=True, notch=False)
     for patch in bp_right.get("boxes", []):
-        patch.set_facecolor(cm.viridis(0.85))
+        patch.set_facecolor(cm.get_cmap("viridis")(0.85))
         patch.set_alpha(0.8)
     axes[1].set_title("Metric 3: gog")
     axes[1].set_xticks([1])
@@ -557,7 +558,7 @@ def add_own_metrics_to_edges(
     adata_z: AnnData,
     adata_predicted_z: AnnData,
     graph: nx.Graph,
-    save_own_cossim: Path = None,
+    save_own_cossim: Path | None = None,
 ) -> nx.Graph:
 
     # helper to get dense 1D numpy array for a given spot id (obs_name)
@@ -615,9 +616,9 @@ def add_own_metrics_to_edges(
 
 def create_box_plots_from_edge_annots(
     graph: nx.Graph,
-    metrics: list = None,
+    metrics: list[Any] | None = None,
     figsize: tuple = (14, 6),
-    output_folder: Path = None,
+    output_folder: Path | None = None,
 ) -> None:
     """
     Create side-by-side boxplots for all specified metrics based on the
@@ -675,11 +676,11 @@ def create_box_plots_from_edge_annots(
 
     # create figure and boxplots
     fig, ax = plt.subplots(1, 1, figsize=figsize)
-    bp = ax.boxplot(data_list, labels=labels, patch_artist=True, notch=False)
+    bp = ax.boxplot(data_list, tick_labels=labels, patch_artist=True, notch=False)
 
     # color boxes
     for patch, color in zip(
-        bp["boxes"], plt.cm.viridis(np.linspace(0, 1, len(bp["boxes"])))
+        bp["boxes"], plt.cm.get_cmap("viridis")(np.linspace(0, 1, len(bp["boxes"])))
     ):
         patch.set_facecolor(color)
         patch.set_alpha(0.7)
@@ -692,7 +693,7 @@ def create_box_plots_from_edge_annots(
     xticks = np.arange(1, len(labels) + 1)
     for xt, cnt in zip(xticks, counts):
         ax.text(
-            xt,
+            float(xt),
             ax.get_ylim()[0],
             f"n={cnt}",
             ha="center",
@@ -719,7 +720,7 @@ def plot_edge_cossim_spatial(
     node_size: int = 20,
     edge_min_width: float = 0.5,
     edge_max_width: float = 5.0,
-    output_folder: Path = None,
+    output_folder: Path | None = None,
 ):
     """
     Draw the graph edges spatially (based on node attribute 'pos') and color/scale
@@ -740,7 +741,7 @@ def plot_edge_cossim_spatial(
         return
 
     lines = []
-    vals = []
+    vals: Any = []
     for u, v, d in G.edges(data=True):
         if metric not in d:
             continue

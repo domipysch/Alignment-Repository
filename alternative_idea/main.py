@@ -2,7 +2,7 @@ import argparse
 import sys
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 import pandas as pd
 import yaml
 import scanpy as sc
@@ -10,7 +10,7 @@ import torch
 import torch.optim as optim
 import logging
 from anndata import AnnData
-from ..utils.io import anndata_to_csv
+from Code.utils.io import anndata_to_csv
 from .src.utils import (
     load_sc_adata,
     load_st_adata,
@@ -162,7 +162,7 @@ def alternative_idea_compute_mapping(
     # 5. Build the spatial graph out of Z
     graph_type = graph_type_from_config(graph_config)
     k = (
-        graph_config["k"]
+        int(graph_config["k"])
         if graph_type in (SpatialGraphType.KNN, SpatialGraphType.MUTUAL_KNN)
         else None
     )
@@ -218,14 +218,20 @@ def alternative_idea_compute_mapping(
     model.train()
 
     # Collect per-epoch losses for plotting: individual components + total
-    losses = {
-        "total-weighted": [],
-        "rec_spot": {"weight": loss_weights["lambda_rec_spot"], "values": []},
-        "rec_gene": {"weight": loss_weights["lambda_rec_gene"], "values": []},
-        "rec_state": {"weight": loss_weights["lambda_rec_state"], "values": []},
-        "clust": {"weight": loss_weights["lambda_clust"], "values": []},
-        "state_entropy": {"weight": loss_weights["lambda_state_entropy"], "values": []},
-        "spot_entropy": {"weight": loss_weights["lambda_spot_entropy"], "values": []},
+    losses: dict[str, Any] = {
+        "total-weighted": list(),
+        "rec_spot": {"weight": loss_weights["lambda_rec_spot"], "values": list()},
+        "rec_gene": {"weight": loss_weights["lambda_rec_gene"], "values": list()},
+        "rec_state": {"weight": loss_weights["lambda_rec_state"], "values": list()},
+        "clust": {"weight": loss_weights["lambda_clust"], "values": list()},
+        "state_entropy": {
+            "weight": loss_weights["lambda_state_entropy"],
+            "values": list(),
+        },
+        "spot_entropy": {
+            "weight": loss_weights["lambda_spot_entropy"],
+            "values": list(),
+        },
     }
 
     def to_scalar(t):
@@ -299,6 +305,8 @@ def alternative_idea_compute_mapping(
         else:
             if epoch % 10 == 0:
                 logger.info(f"Epoch {epoch:03d} | Total Loss: {total_loss.item():.4f}")
+
+    assert A is not None and B is not None
 
     if save_intermediate:
         logger.info("Saving intermediate results...")

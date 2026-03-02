@@ -12,9 +12,9 @@ import csv
 import traceback
 import logging
 import alternative_idea.main as alternative_idea
-import metrics.run_all_metrics as run_all_metrics
-import metrics.run_all_shared_boxplots as run_all_shared_boxplots
-import metrics.run_all_permutation_boxplots as run_all_permutation_boxplots
+import metrics.run_all_metrics
+import metrics.run_all_shared_boxplots
+import metrics.run_all_permutation_boxplots
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ def create_shared_boxplots(
 ):
 
     # Run shared metrics
-    run_all_shared_boxplots.main(
+    metrics.run_all_shared_boxplots.main(
         [metrics_folder / s_id for s_id in ids],
         ids,
         output_folder,
@@ -35,7 +35,7 @@ def create_shared_boxplots(
 
     # Run shared permutation test boxplots
     if run_permutation_tests:
-        run_all_permutation_boxplots.main(
+        metrics.run_all_permutation_boxplots.main(
             [metrics_folder / s_id for s_id in ids],
             ids,
             output_folder,
@@ -66,7 +66,7 @@ def run_config(
     )
 
     # Run individual metrics (probabilistic)
-    run_all_metrics.main(
+    metrics.run_all_metrics.main(
         dataset,
         metrics_folder,
         result_gep=predicted_gep,
@@ -75,7 +75,7 @@ def run_config(
 
     # Run individual metrics (deterministic) if applicable
     if predicted_gep_det is not None:
-        run_all_metrics.main(
+        metrics.run_all_metrics.main(
             dataset,
             metrics_folder_det,
             result_gep=predicted_gep_det,

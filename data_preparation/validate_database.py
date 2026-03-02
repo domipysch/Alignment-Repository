@@ -351,9 +351,9 @@ def main() -> None:
 
     if overall_errors:
         print("\nERRORS:", file=sys.stderr)
-        for name, e in overall_errors.items():
+        for name, err in overall_errors.items():
             print(f"- {name}:", file=sys.stderr)
-            for msg in e:
+            for msg in err:
                 print(f"    - {msg}", file=sys.stderr)
         sys.exit(1)
     else:

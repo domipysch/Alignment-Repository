@@ -74,7 +74,10 @@ def compute_metrics_o1(dataset_folder: Path, result_gep: AnnData) -> Dict[str, f
 
 
 def create_norms_histograms(
-    metrics_result: Dict, out_path: Path = None, bins: int = 50, show: bool = False
+    metrics_result: Dict,
+    out_path: Path | None = None,
+    bins: int = 50,
+    show: bool = False,
 ):
     """
     Erzeugt eine einzige Abbildung mit zwei nebeneinander stehenden Histogrammen (PNG):
@@ -117,7 +120,10 @@ def create_norms_histograms(
 
 
 def create_log_norms_histograms(
-    metrics_result: Dict, out_path: Path = None, bins: int = 50, show: bool = False
+    metrics_result: Dict,
+    out_path: Path | None = None,
+    bins: int = 50,
+    show: bool = False,
 ):
     """
     Erzeugt eine einzige Abbildung mit zwei nebeneinander stehenden Histogrammen (PNG) der Log-Normen:
@@ -168,7 +174,7 @@ def create_log_norms_histograms(
 
 
 def create_norms_boxplots(
-    metrics_result: Dict, out_path: Path = None, show: bool = False
+    metrics_result: Dict, out_path: Path | None = None, show: bool = False
 ):
     """
     Erzeugt eine Abbildung mit zwei nebeneinander stehenden Boxplots:
@@ -218,7 +224,7 @@ def create_norms_boxplots(
 
 
 def create_log_norms_boxplots(
-    metrics_result: Dict, out_path: Path = None, show: bool = False
+    metrics_result: Dict, out_path: Path | None = None, show: bool = False
 ):
     """
     Erzeugt eine Abbildung mit zwei nebeneinander stehenden Boxplots der Log-Normen:
@@ -236,7 +242,7 @@ def create_log_norms_boxplots(
     # Zielordner bestimmen
     # out_path = Path(out_dir)
 
-    saved = {}
+    saved: dict[str, object] = {}
     fig, axes = plt.subplots(1, 2, figsize=(10, 5), constrained_layout=True)
 
     # Marker log-boxplot (links)

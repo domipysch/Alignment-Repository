@@ -1,3 +1,5 @@
+from typing import Optional
+
 from anndata import AnnData
 import torch
 from enum import Enum, auto
@@ -18,8 +20,8 @@ class SpatialGraphType(Enum):
 def build_spatial_graph(
     adata_st: AnnData,
     method: SpatialGraphType = SpatialGraphType.KNN,
-    k: int = 4,
-    radius: float = None,
+    k: Optional[int] = 4,
+    radius: Optional[float] = None,
     device: torch.device = torch.device("cpu"),
 ) -> Tensor:
     """
@@ -46,6 +48,7 @@ def build_spatial_graph(
     edge_list = []
 
     if method == SpatialGraphType.KNN:
+        assert k is not None
         # Standard kNN graph
         _, indices = tree.query(coords, k=k + 1)
         for i in range(num_spots):
@@ -54,6 +57,7 @@ def build_spatial_graph(
                     edge_list.append((i, neighbor))
 
     elif method == SpatialGraphType.MUTUAL_KNN:
+        assert k is not None
         # i and j are connected only if i is in kNN(j) AND j is in kNN(i)
         _, indices = tree.query(coords, k=k + 1)
         # Create a list of sets for fast lookup

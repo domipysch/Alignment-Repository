@@ -23,7 +23,36 @@ within each datasets directory.
 Since every alignment method has its own dependencies and requirements,
 different conda environments were created for each method.
 
-todo. files zum erstellen der environments nachstellen
+### AlternativeIdea
+
+```bash
+conda env create -f alternative_idea/environment.yml
+conda activate alternative-idea
+```
+
+### Tangram
+
+```bash
+conda env create -f aligners/environment_tangram.yml
+conda activate tangram_env
+```
+
+### TACCO
+
+```bash
+conda env create -f aligners/environment_tacco.yml
+conda activate tacco_env
+```
+
+### DOT
+
+DOTr is not available on conda-forge and must be installed from GitHub after creating the environment:
+
+```bash
+conda env create -f aligners/environment_dot.yml
+conda activate dot_env
+Rscript -e "devtools::install_github('saezlab/DOT')"
+```
 
 ## TODO
 

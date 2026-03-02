@@ -35,16 +35,3 @@ loss_weights:
     lambda_clust: 0
     lambda_state_entropy: 0.15
     lambda_spot_entropy: 0.08
-  - lambda_rec_spot: 1.0
-    lambda_rec_gene: 1.0
-    lambda_rec_state: 0.01
-    lambda_clust: 0.01
-    lambda_state_entropy: 0.15
-    lambda_spot_entropy: 0.08
-  - lambda_rec_spot: 1.0
-    lambda_rec_gene: 1.0
-    lambda_rec_state: 0.1
-    lambda_clust: 0.1
-    lambda_state_entropy: 0.15
-    lambda_spot_entropy: 0.08
-

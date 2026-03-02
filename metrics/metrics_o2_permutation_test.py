@@ -5,7 +5,7 @@ import json
 import multiprocessing as mp
 import logging
 from anndata import AnnData
-from MPA_Code.metrics.utils.dataset_query import get_z_real_and_predicted_data_only_shared_genes
+from .utils.dataset_query import get_z_real_and_predicted_data_only_shared_genes
 logger = logging.getLogger(__name__)
 
 

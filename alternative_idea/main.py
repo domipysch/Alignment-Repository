@@ -107,7 +107,7 @@ def alternative_idea_compute_mapping(
     adata_sc: AnnData,
     adata_st: AnnData,
     verbose_logging: bool,
-    use_device: str = None,
+    device: torch.device,
     save_intermediate: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor, dict]:
 
@@ -119,18 +119,6 @@ def alternative_idea_compute_mapping(
     logger.debug(f"Loaded model config: {model_config}")
     logger.debug(f"Loaded graph config: {graph_config}")
     logger.debug(f"Loaded loss weights: {loss_weights}")
-
-    # 2. Setup Device
-    # Use 'mps' for Apple Silicon, 'cuda' for NVIDIA, or 'cpu'
-    if use_device is None:
-        if torch.backends.mps.is_available():
-            device = torch.device("mps")
-        elif torch.cuda.is_available():
-            device = torch.device("cuda")
-        else:
-            device = torch.device("cpu")
-    else:
-        device = torch.device(use_device)
     logger.info(f"Using device: {device}")
 
     # (Optional) 3. Preprocess data (only for mapping): Normalize & Log-transform
@@ -397,7 +385,6 @@ def alternative_idea_compute_mapping(
             df_weight = pd.DataFrame(C_argmax.detach().cpu().numpy())
             df_weight.to_csv(folder_intermediate / 'C_argmax.csv', index=False)
 
-            # todo. ggf. auch andere det dumpen.
 
     logger.info("Alignment complete.")
     return A, B, losses
@@ -409,7 +396,7 @@ def compute_gene_expression_prediction(
     adata_sc: AnnData,
     adata_st: AnnData,
     deterministic_mapping: bool,
-    torch_device: str,
+    torch_device: torch.device,
     use_cm: bool,
 ) -> AnnData:
 
@@ -462,12 +449,20 @@ def main(
     config_path: Path,
     output_path: Optional[Path],
     mapping_output_path: Optional[Path] = None,
+    store_intermediate: bool = False,
     verbose_logging: bool = False
 ) -> tuple[AnnData, Optional[AnnData], dict]:
 
     mapping_config, _, _, training_config, _ = load_config(config_path)
 
-    TORCH_DEVICE = "mps"
+    # Setup Device
+    # Use 'mps' for Apple Silicon, 'cuda' for NVIDIA, or 'cpu'
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
 
     # Step 1: Load data
     logger.info("Load input scRNA and ST data...")
@@ -482,8 +477,8 @@ def main(
         adata_sc.copy(),
         adata_st.copy(),
         verbose_logging=verbose_logging,
-        use_device=TORCH_DEVICE,
-        save_intermediate=True,  # todo. temp.
+        device=device,
+        save_intermediate=store_intermediate,
     )  # S x C, plus loss history
     logger.info("Obtained spot-to-cell mapping AnnData.")
     assert spot_to_cell_map.shape == (adata_st.n_obs, adata_sc.n_obs), "dims passen nicht"
@@ -516,7 +511,7 @@ def main(
         adata_sc,
         adata_st,
         False,
-        TORCH_DEVICE,
+        device,
         training_config["use_cm"],
     )
 
@@ -547,7 +542,7 @@ def main(
             adata_sc,
             adata_st,
             True,
-            TORCH_DEVICE,
+            device,
             training_config["use_cm"],
         )
 
@@ -596,4 +591,5 @@ if __name__ == "__main__":
         args.output_path,
         args.mapping_output_path,
         verbose_logging=(args.logging == "verbose"),
+        store_intermediate=True,
     )

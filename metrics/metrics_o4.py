@@ -7,9 +7,9 @@ import numpy as np
 from anndata import AnnData
 from scipy.spatial import cKDTree, Delaunay
 from scipy.spatial.distance import cdist
-from MPA_Code.metrics.utils.dataset_query import get_z_real_and_predicted_data_only_shared_genes
+from .utils.dataset_query import get_z_real_and_predicted_data_only_shared_genes
 import warnings
-from MPA_Code.metrics.utils.distance_metrics import (
+from .utils.distance_metrics import (
     cosine_similarity,
     sqrt_cosine_similarity,
     getis_ord_g_stat,

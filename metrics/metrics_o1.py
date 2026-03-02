@@ -8,8 +8,8 @@ import json
 import logging
 from anndata import AnnData
 from scipy import sparse
-from MPA_Code.metrics.utils.utils import compute_basic_metrics_for_gene_groups
-from MPA_Code.metrics.utils.dataset_query import get_shared_genes
+from .utils.utils import compute_basic_metrics_for_gene_groups
+from .utils.dataset_query import get_shared_genes
 logger = logging.getLogger(__name__)
 
 

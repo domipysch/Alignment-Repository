@@ -1,13 +1,12 @@
 mapping:
-  deterministic:
-    - true
+  deterministic: false
 graph:
   type: knn
   k:
-    - 4
+    - 3
 model:
   d:
-    - 16
+    - 32
   enc_hidden_dim:
     - 64
   dec_hidden_dim:
@@ -31,9 +30,21 @@ training:
     - true
 loss_weights:
   - lambda_rec_spot: 1.0
-    lambda_rec_gene: 0
+    lambda_rec_gene: 1.0
     lambda_rec_state: 0
     lambda_clust: 0
-    lambda_state_entropy: 0.1
+    lambda_state_entropy: 0.15
+    lambda_spot_entropy: 0.08
+  - lambda_rec_spot: 1.0
+    lambda_rec_gene: 1.0
+    lambda_rec_state: 0.01
+    lambda_clust: 0.01
+    lambda_state_entropy: 0.15
+    lambda_spot_entropy: 0.08
+  - lambda_rec_spot: 1.0
+    lambda_rec_gene: 1.0
+    lambda_rec_state: 0.1
+    lambda_clust: 0.1
+    lambda_state_entropy: 0.15
     lambda_spot_entropy: 0.08
 

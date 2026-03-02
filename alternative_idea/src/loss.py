@@ -41,7 +41,6 @@ class AlternativeIdeaLoss(nn.Module):
 
         self.use_cm = use_cm
 
-        # vielleicht ist das mit dem mean overengineered und wir brauchen einfach nur ersten wert. todo. check.
         # Accumulators used during warmup to compute the baseline averages
         self._acc_rec_state = 0.0
         self._acc_clust = 0.0
@@ -99,7 +98,7 @@ class AlternativeIdeaLoss(nn.Module):
 
         # Distance = sqrt(1 - similarity)
         # loss_per_spot = torch.sqrt(1.0 - cosine_sim)  # (S,)
-        # todo. Or doch without sqrt?, gab nan-probleme mit
+        # sic. mit sqrt gabs nan-probleme im traning mit den gradienten
         loss_per_spot = torch.clamp(1.0 - cosine_sim, min=0.0)
 
         return torch.mean(loss_per_spot)
@@ -169,7 +168,7 @@ class AlternativeIdeaLoss(nn.Module):
         # 5. Apply weights q_k and sum
         # This gives the total state reconstruction loss
         # weighted_loss = torch.sum(q * state_errors)
-        # todo. check. war sum!
+        # sic. switched to mean to keep value range in bounds
         weighted_loss = torch.mean(q * state_errors)
 
         return weighted_loss

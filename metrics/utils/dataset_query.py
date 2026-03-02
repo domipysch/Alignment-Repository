@@ -2,7 +2,7 @@ from typing import List, Tuple
 from pathlib import Path
 import pandas as pd
 from anndata import AnnData
-from MPA_Code.utils.io import csv_to_anndata
+from ...utils.io import csv_to_anndata
 
 
 def get_sc_genes(dataset_folder: Path) -> List[str]:

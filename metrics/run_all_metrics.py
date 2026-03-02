@@ -3,12 +3,12 @@ from pathlib import Path
 import logging
 import sys
 from anndata import AnnData
-from MPA_Code.utils.io import csv_to_anndata
-from MPA_Code.metrics.metrics_o1 import main as main1
-from MPA_Code.metrics.metrics_o2 import main as main2
-from MPA_Code.metrics.metrics_o4 import main as main4
-from MPA_Code.metrics.metrics_o2_permutation_test import main as main2permutation
-from MPA_Code.metrics.metrics_o4_permutation_test import main as main4permutation
+from ..utils.io import csv_to_anndata
+from .metrics_o1 import main as main1
+from .metrics_o2 import main as main2
+from .metrics_o4 import main as main4
+from .metrics_o2_permutation_test import main as main2permutation
+from .metrics_o4_permutation_test import main as main4permutation
 logger = logging.getLogger(__name__)
 
 

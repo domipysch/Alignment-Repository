@@ -47,7 +47,8 @@ def run_config(dataset: Path, run_config_path: Path, save_result_path: Optional[
         output_path=save_result_path,
         # mapping_output_path=save_mapping_path,
         mapping_output_path=None,
-        verbose_logging=verbose_flag
+        verbose_logging=verbose_flag,
+        store_intermediate=True,
     )
 
     # Run individual metrics (probabilistic)
@@ -193,7 +194,8 @@ def main(dataset: Path, experiment_config: Path, result_folder: Path, metric_fol
             metric_dir.mkdir(parents=True, exist_ok=False)
 
             # if mode is 'deterministic', then also create a folder "<run_id>_det"
-            if base_cfg['mapping']['deterministic']:
+            metric_dir_det = None
+            if cfg_copy['mapping']['deterministic']:
                 metric_dir_det = metric_folder / f"{run_id}_det"
                 metric_dir_det.mkdir(parents=True, exist_ok=False)
 

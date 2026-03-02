@@ -16,6 +16,7 @@ training:
   use_cm: false
 loss_weights:
   lambda_rec_spot: 1.0
+  lambda_rec_gene: 1.0
   lambda_rec_state: 1.0
   lambda_clust: 1.0
   lambda_state_entropy: 1.0

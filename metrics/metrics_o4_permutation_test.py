@@ -5,9 +5,9 @@ import networkx as nx
 import numpy as np
 from anndata import AnnData
 import argparse
-from MPA_Code.metrics.utils.dataset_query import get_z_real_and_predicted_data_only_shared_genes
-from MPA_Code.metrics.utils.distance_metrics import cosine_similarity
-from MPA_Code.metrics.metrics_o4 import create_spatial_graph, NeighborhoodType
+from .utils.dataset_query import get_z_real_and_predicted_data_only_shared_genes
+from .utils.distance_metrics import cosine_similarity
+from .metrics_o4 import create_spatial_graph, NeighborhoodType
 import json
 import sys
 import logging

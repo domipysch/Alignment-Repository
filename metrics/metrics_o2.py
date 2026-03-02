@@ -7,8 +7,8 @@ import logging
 import matplotlib.pyplot as plt
 import json
 from anndata import AnnData
-from MPA_Code.metrics.utils.dataset_query import get_z_real_and_predicted_data_only_shared_genes
-from MPA_Code.metrics.utils.distance_metrics import cosine_similarity
+from .utils.dataset_query import get_z_real_and_predicted_data_only_shared_genes
+from .utils.distance_metrics import cosine_similarity
 logger = logging.getLogger(__name__)
 
 

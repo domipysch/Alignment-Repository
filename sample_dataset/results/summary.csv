@@ -1,0 +1,2 @@
+id,config_path,output_path,status,duration_seconds,error_message,L1,L2,L3,L4,L5,L6
+0,sample_dataset/results/0/config.yml,sample_dataset/results/0/result_GEP.csv,ok,12.779,,0.31,0.02,26.95,2.17,0.53,0.17

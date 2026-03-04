@@ -1,9 +1,8 @@
 import logging
 import argparse
 from pathlib import Path
-import os
 from .run_dot import dot_align_data
-from ..metrics import run_all_shared_boxplots
+from ..metrics import run_all_shared_boxplots, run_all_permutation_boxplots
 from ..metrics import run_all_metrics
 from ..utils.io import csv_to_anndata
 
@@ -41,28 +40,14 @@ if __name__ == "__main__":
         output_folder.mkdir(parents=True, exist_ok=True)
         logging.info(f"Created output folder: {output_folder}")
 
-    # If output folder not empty, error
-    if any(output_folder.iterdir()):
-        logging.error(
-            f"Output folder is not empty: {output_folder}. Please provide an empty folder."
-        )
-        exit(1)
-
     # If metrics folder does not exist, create it
     metrics_folder = Path(args.metrics_folder)
     if not metrics_folder.exists():
         metrics_folder.mkdir(parents=True, exist_ok=True)
         logging.info(f"Created metrics folder: {metrics_folder}")
 
-    # If metrics folder not empty, error
-    if any(metrics_folder.iterdir()):
-        logging.error(
-            f"metrics_folder is not empty: {metrics_folder}. Please provide an empty folder."
-        )
-        exit(1)
-
     logging.info("Run 1/6: Prob, individual cells")
-    output_path = os.path.join(args.output_folder, "prob_cells_GEP.csv")
+    output_path = Path(args.output_folder) / "prob_cells_GEP.csv"
     dot_align_data(
         args.dataset,
         "HSO",
@@ -74,11 +59,11 @@ if __name__ == "__main__":
         dataset_folder,
         metrics_folder / "prob_cells",
         result_gep=csv_to_anndata(Path(output_path), transpose=False),
-        run_permutation_tests=False,
+        run_permutation_tests=True,
     )
 
     logging.info("Run 2/6: Prob, Cell type major")
-    output_path = os.path.join(args.output_folder, "prob_celltype_major_GEP.csv")
+    output_path = Path(args.output_folder) / "prob_celltype_major_GEP.csv"
     dot_align_data(
         args.dataset,
         "HSO",
@@ -90,11 +75,11 @@ if __name__ == "__main__":
         dataset_folder,
         metrics_folder / "prob_celltype_major",
         result_gep=csv_to_anndata(Path(output_path), transpose=False),
-        run_permutation_tests=False,
+        run_permutation_tests=True,
     )
 
     logging.info("Run 3/6: Prob, Cell type minor")
-    output_path = os.path.join(args.output_folder, "prob_celltype_minor_GEP.csv")
+    output_path = Path(args.output_folder) / "prob_celltype_minor_GEP.csv"
     dot_align_data(
         args.dataset,
         "HSO",
@@ -106,11 +91,11 @@ if __name__ == "__main__":
         dataset_folder,
         metrics_folder / "prob_celltype_minor",
         result_gep=csv_to_anndata(Path(output_path), transpose=False),
-        run_permutation_tests=False,
+        run_permutation_tests=True,
     )
 
     logging.info("Run 4/6: Det, individual cells")
-    output_path = os.path.join(args.output_folder, "det_cells_GEP.csv")
+    output_path = Path(args.output_folder) / "det_cells_GEP.csv"
     dot_align_data(
         args.dataset,
         "HSO",
@@ -122,11 +107,11 @@ if __name__ == "__main__":
         dataset_folder,
         metrics_folder / "det_cells",
         result_gep=csv_to_anndata(Path(output_path), transpose=False),
-        run_permutation_tests=False,
+        run_permutation_tests=True,
     )
 
     logging.info("Run 5/6: Det, Cell type major")
-    output_path = os.path.join(args.output_folder, "det_celltype_major_GEP.csv")
+    output_path = Path(args.output_folder) / "det_celltype_major_GEP.csv"
     dot_align_data(
         args.dataset,
         "HSO",
@@ -138,11 +123,11 @@ if __name__ == "__main__":
         dataset_folder,
         metrics_folder / "det_celltype_major",
         result_gep=csv_to_anndata(Path(output_path), transpose=False),
-        run_permutation_tests=False,
+        run_permutation_tests=True,
     )
 
     logging.info("Run 6/6: Det, Cell type minor")
-    output_path = os.path.join(args.output_folder, "det_celltype_minor_GEP.csv")
+    output_path = Path(args.output_folder) / "det_celltype_minor_GEP.csv"
     dot_align_data(
         args.dataset,
         "HSO",
@@ -154,7 +139,7 @@ if __name__ == "__main__":
         dataset_folder,
         metrics_folder / "det_celltype_minor",
         result_gep=csv_to_anndata(Path(output_path), transpose=False),
-        run_permutation_tests=False,
+        run_permutation_tests=True,
     )
 
     # Create shared boxplots
@@ -162,15 +147,28 @@ if __name__ == "__main__":
     metric_folder_shared.mkdir(parents=True, exist_ok=True)
     folders = [
         "det_cells",
-        "det_celltype_major",
         "det_celltype_minor",
+        "det_celltype_major",
         "prob_cells",
-        "prob_celltype_major",
         "prob_celltype_minor",
+        "prob_celltype_major",
+    ]
+    labels = [
+        "Cell - det.",
+        "Minor cell state - det.",
+        "Major cell state - det.",
+        "Cell - prob.",
+        "Minor cell state - prob.",
+        "Major cell state - prob.",
     ]
     # Run shared metrics
     run_all_shared_boxplots.main(
         [metrics_folder / fol for fol in folders],
-        folders,
+        labels,
+        metric_folder_shared,
+    )
+    run_all_permutation_boxplots.main(
+        [metrics_folder / fol for fol in folders],
+        labels,
         metric_folder_shared,
     )

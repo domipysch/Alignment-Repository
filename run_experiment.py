@@ -110,205 +110,207 @@ def main(
         raise ValueError("Top-level experiment_config must be a mapping/dict.")
 
     # Helper: collect leaf paths -> list of values (lists become value lists, scalars become singleton list)
-    def collect_leaves(node, path=()):
-        """
-        Traverses `node` (which may be nested dicts/lists/scalars) and returns a list of
-        (path_tuple, values_list) pairs.
-
-        New behavior: if at some path the node is a list AND every element of that list is a dict,
-        we treat the whole list as a set of alternative full-config dictionaries for that path.
-        This allows specifying e.g. multiple complete `loss_weights` dicts as alternative configs.
-
-        Examples handled:
-        - scalar -> becomes [scalar]
-        - list of scalars -> becomes that list
-        - list of dicts -> treated as a leaf; values_list equals the list of dicts
-        - dict -> recurse into keys
-        """
-        leaves = []
-        # If it's a list at this path
-        if isinstance(node, list):
-            # empty list -> keep as-is (will be validated later)
-            if len(node) == 0:
-                leaves.append((path, []))
-                return leaves
-            # if all items are dicts, treat the whole list as an atomic set of dict-options
-            if all(isinstance(item, dict) for item in node):
-                leaves.append((path, node))
-                return leaves
-            # otherwise treat it as a normal list of scalar options
-            leaves.append((path, node))
-            return leaves
-
-        # If it's a dict, recurse into keys
-        if isinstance(node, dict):
-            for k, v in node.items():
-                leaves.extend(collect_leaves(v, path + (k,)))
-            return leaves
-
-        # Otherwise scalar leaf
-        vals = [node]
-        leaves.append((path, vals))
-        return leaves
-
-    leaves = collect_leaves(base_cfg)
-
-    # Ensure no leaf has empty list
-    for path, vals in leaves:
-        if not isinstance(vals, list) or len(vals) == 0:
-            raise ValueError(
-                f"Configuration entry {'.'.join(path)} must be a non-empty list or scalar."
-            )
-
-    # Prepare ordered lists for product
-    paths = [p for p, v in leaves]
-    lists = [v for p, v in leaves]
-
-    total_runs = 1
-    for v in lists:
-        total_runs *= len(v)
-
-    logger.info(
-        f"Experiment config loaded from {experiment_config}. Total runs to execute: {total_runs}"
-    )
-
-    if os.path.exists(result_folder):
-        shutil.rmtree(result_folder)
-    if os.path.exists(metric_folder):
-        shutil.rmtree(metric_folder)
-    result_folder.mkdir(parents=True, exist_ok=False)
-    metric_folder.mkdir(parents=True, exist_ok=False)
-
-    # Copy experiment config to result folder for reference
-    shutil.copy(experiment_config, result_folder / "experiment_config.yml")
-
-    # Prepare summary CSV
-    summary_path = result_folder / "summary.csv"
-    write_header = not summary_path.exists()
-
-    # Iterate over grid
-    combo_iter = itertools.product(*lists)
-
-    # Function to set a value in nested dict by path
-    def set_in_dict(d: dict, path: tuple, value):
-        cur = d
-        for key in path[:-1]:
-            if key not in cur or not isinstance(cur[key], dict):
-                cur[key] = {}
-            cur = cur[key]
-        cur[path[-1]] = value
-
-    run_id = 0
-    with open(summary_path, "a", newline="") as summary_file:
-
-        writer = csv.writer(summary_file)
-        if write_header:
-            writer.writerow(
-                [
-                    "id",
-                    "config_path",
-                    "output_path",
-                    "status",
-                    "duration_seconds",
-                    "error_message",
-                    "L1",
-                    "L2",
-                    "L3",
-                    "L4",
-                    "L5",
-                    "L6",
-                ]
-            )
-
-        for combo in combo_iter:
-            # Build run-specific config
-            cfg_copy = copy.deepcopy(base_cfg)
-            for path, val in zip(paths, combo):
-                set_in_dict(cfg_copy, path, val)
-
-            run_dir = result_folder / str(run_id)
-            run_dir.mkdir(parents=True, exist_ok=True)
-            run_config_path = run_dir / "config.yml"
-            with open(run_config_path, "w") as cf:
-                yaml.safe_dump(cfg_copy, cf, sort_keys=False)
-
-            result_path = run_dir / "result_GEP.csv"
-
-            metric_dir = metric_folder / str(run_id)
-            metric_dir.mkdir(parents=True, exist_ok=False)
-
-            # if mode is 'deterministic', then also create a folder "<run_id>_det"
-            metric_dir_det = None
-            if cfg_copy["mapping"]["deterministic"]:
-                metric_dir_det = metric_folder / f"{run_id}_det"
-                metric_dir_det.mkdir(parents=True, exist_ok=False)
-
-            start = time.time()
-            try:
-                logger.info(
-                    f"Starting run {run_id}/{total_runs - 1} -> writing to {run_dir}"
-                )
-                losses_after_last_epoch = run_config(
-                    dataset,
-                    run_config_path,
-                    (run_dir / "gep.csv") if save_result else None,
-                    (run_dir / "mapping.csv") if save_result else None,
-                    metric_dir,
-                    metric_dir_det if metric_dir_det is not None else "",
-                    run_permutation_tests=run_permutation_tests,
-                )
-                duration = time.time() - start
-                writer.writerow(
-                    [
-                        run_id,
-                        str(run_config_path),
-                        str(result_path),
-                        "ok",
-                        f"{duration:.3f}",
-                        "",
-                        losses_after_last_epoch["rec_spot"],
-                        losses_after_last_epoch["rec_gene"],
-                        losses_after_last_epoch["rec_state"],
-                        losses_after_last_epoch["clust"],
-                        losses_after_last_epoch["state_entropy"],
-                        losses_after_last_epoch["spot_entropy"],
-                    ]
-                )
-                logger.info(f"Run {run_id} completed in {duration:.2f}s")
-
-            except Exception as e:
-                duration = time.time() - start
-                tb = traceback.format_exc()
-                logger.error(f"Run {run_id} failed after {duration:.2f}s: {e}\n{tb}")
-                writer.writerow(
-                    [
-                        run_id,
-                        str(run_config_path),
-                        str(result_path),
-                        "error",
-                        f"{duration:.3f}",
-                        str(e),
-                        "",
-                        "",
-                        "",
-                        "",
-                        "",
-                        "",
-                    ]
-                )
-                # Stop on first error as requested
-                raise
-
-            run_id += 1
+    # def collect_leaves(node, path=()):
+    #     """
+    #     Traverses `node` (which may be nested dicts/lists/scalars) and returns a list of
+    #     (path_tuple, values_list) pairs.
+    #
+    #     New behavior: if at some path the node is a list AND every element of that list is a dict,
+    #     we treat the whole list as a set of alternative full-config dictionaries for that path.
+    #     This allows specifying e.g. multiple complete `loss_weights` dicts as alternative configs.
+    #
+    #     Examples handled:
+    #     - scalar -> becomes [scalar]
+    #     - list of scalars -> becomes that list
+    #     - list of dicts -> treated as a leaf; values_list equals the list of dicts
+    #     - dict -> recurse into keys
+    #     """
+    #     leaves = []
+    #     # If it's a list at this path
+    #     if isinstance(node, list):
+    #         # empty list -> keep as-is (will be validated later)
+    #         if len(node) == 0:
+    #             leaves.append((path, []))
+    #             return leaves
+    #         # if all items are dicts, treat the whole list as an atomic set of dict-options
+    #         if all(isinstance(item, dict) for item in node):
+    #             leaves.append((path, node))
+    #             return leaves
+    #         # otherwise treat it as a normal list of scalar options
+    #         leaves.append((path, node))
+    #         return leaves
+    #
+    #     # If it's a dict, recurse into keys
+    #     if isinstance(node, dict):
+    #         for k, v in node.items():
+    #             leaves.extend(collect_leaves(v, path + (k,)))
+    #         return leaves
+    #
+    #     # Otherwise scalar leaf
+    #     vals = [node]
+    #     leaves.append((path, vals))
+    #     return leaves
+    #
+    # leaves = collect_leaves(base_cfg)
+    #
+    # # Ensure no leaf has empty list
+    # for path, vals in leaves:
+    #     if not isinstance(vals, list) or len(vals) == 0:
+    #         raise ValueError(
+    #             f"Configuration entry {'.'.join(path)} must be a non-empty list or scalar."
+    #         )
+    #
+    # # Prepare ordered lists for product
+    # paths = [p for p, v in leaves]
+    # lists = [v for p, v in leaves]
+    #
+    # total_runs = 1
+    # for v in lists:
+    #     total_runs *= len(v)
+    #
+    # logger.info(
+    #     f"Experiment config loaded from {experiment_config}. Total runs to execute: {total_runs}"
+    # )
+    #
+    # if os.path.exists(result_folder):
+    #     shutil.rmtree(result_folder)
+    # if os.path.exists(metric_folder):
+    #     shutil.rmtree(metric_folder)
+    # result_folder.mkdir(parents=True, exist_ok=False)
+    # metric_folder.mkdir(parents=True, exist_ok=False)
+    #
+    # # Copy experiment config to result folder for reference
+    # shutil.copy(experiment_config, result_folder / "experiment_config.yml")
+    #
+    # # Prepare summary CSV
+    # summary_path = result_folder / "summary.csv"
+    # write_header = not summary_path.exists()
+    #
+    # # Iterate over grid
+    # combo_iter = itertools.product(*lists)
+    #
+    # # Function to set a value in nested dict by path
+    # def set_in_dict(d: dict, path: tuple, value):
+    #     cur = d
+    #     for key in path[:-1]:
+    #         if key not in cur or not isinstance(cur[key], dict):
+    #             cur[key] = {}
+    #         cur = cur[key]
+    #     cur[path[-1]] = value
+    #
+    # run_id = 0
+    # with open(summary_path, "a", newline="") as summary_file:
+    #
+    #     writer = csv.writer(summary_file)
+    #     if write_header:
+    #         writer.writerow(
+    #             [
+    #                 "id",
+    #                 "config_path",
+    #                 "output_path",
+    #                 "status",
+    #                 "duration_seconds",
+    #                 "error_message",
+    #                 "L1",
+    #                 "L2",
+    #                 "L3",
+    #                 "L4",
+    #                 "L5",
+    #                 "L6",
+    #             ]
+    #         )
+    #
+    #     for combo in combo_iter:
+    #         # Build run-specific config
+    #         cfg_copy = copy.deepcopy(base_cfg)
+    #         for path, val in zip(paths, combo):
+    #             set_in_dict(cfg_copy, path, val)
+    #
+    #         run_dir = result_folder / str(run_id)
+    #         run_dir.mkdir(parents=True, exist_ok=True)
+    #         run_config_path = run_dir / "config.yml"
+    #         with open(run_config_path, "w") as cf:
+    #             yaml.safe_dump(cfg_copy, cf, sort_keys=False)
+    #
+    #         result_path = run_dir / "result_GEP.csv"
+    #
+    #         metric_dir = metric_folder / str(run_id)
+    #         metric_dir.mkdir(parents=True, exist_ok=False)
+    #
+    #         # if mode is 'deterministic', then also create a folder "<run_id>_det"
+    #         metric_dir_det = None
+    #         if cfg_copy["mapping"]["deterministic"]:
+    #             metric_dir_det = metric_folder / f"{run_id}_det"
+    #             metric_dir_det.mkdir(parents=True, exist_ok=False)
+    #
+    #         start = time.time()
+    #         try:
+    #             logger.info(
+    #                 f"Starting run {run_id}/{total_runs - 1} -> writing to {run_dir}"
+    #             )
+    #             losses_after_last_epoch = run_config(
+    #                 dataset,
+    #                 run_config_path,
+    #                 (run_dir / "gep.csv") if save_result else None,
+    #                 (run_dir / "mapping.csv") if save_result else None,
+    #                 metric_dir,
+    #                 metric_dir_det if metric_dir_det is not None else "",
+    #                 run_permutation_tests=run_permutation_tests,
+    #             )
+    #             duration = time.time() - start
+    #             writer.writerow(
+    #                 [
+    #                     run_id,
+    #                     str(run_config_path),
+    #                     str(result_path),
+    #                     "ok",
+    #                     f"{duration:.3f}",
+    #                     "",
+    #                     losses_after_last_epoch["rec_spot"],
+    #                     losses_after_last_epoch["rec_gene"],
+    #                     losses_after_last_epoch["rec_state"],
+    #                     losses_after_last_epoch["clust"],
+    #                     losses_after_last_epoch["state_entropy"],
+    #                     losses_after_last_epoch["spot_entropy"],
+    #                 ]
+    #             )
+    #             logger.info(f"Run {run_id} completed in {duration:.2f}s")
+    #
+    #         except Exception as e:
+    #             duration = time.time() - start
+    #             tb = traceback.format_exc()
+    #             logger.error(f"Run {run_id} failed after {duration:.2f}s: {e}\n{tb}")
+    #             writer.writerow(
+    #                 [
+    #                     run_id,
+    #                     str(run_config_path),
+    #                     str(result_path),
+    #                     "error",
+    #                     f"{duration:.3f}",
+    #                     str(e),
+    #                     "",
+    #                     "",
+    #                     "",
+    #                     "",
+    #                     "",
+    #                     "",
+    #                 ]
+    #             )
+    #             # Stop on first error as requested
+    #             raise
+    #
+    #         run_id += 1
 
     # Create shared boxplots
     metric_folder_shared = metric_folder / "shared"
     metric_folder_shared.mkdir(parents=True, exist_ok=False)
-    run_names = list(map(str, range(run_id)))
-    if base_cfg["mapping"]["deterministic"]:
-        run_names += list(f"{runid}_det" for runid in range(run_id))
+    # run_names = list(map(str, range(run_id)))
+    # if base_cfg["mapping"]["deterministic"]:
+    #     run_names += list(f"{runid}_det" for runid in range(run_id))
+
     create_shared_boxplots(
-        run_names,
+        # run_names,  # todo revert.
+        ["AB", "CD"],
         metric_folder,
         metric_folder_shared,
         run_permutation_tests=run_permutation_tests,

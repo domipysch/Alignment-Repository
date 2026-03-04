@@ -4,6 +4,7 @@ from .spatial_graph import SpatialGraphType
 import anndata as ad
 import pandas as pd
 import logging
+import json
 from ...utils.io import csv_to_anndata
 import matplotlib.pyplot as plt
 
@@ -116,6 +117,15 @@ def dump_loss_logs(losses, config_path) -> dict:
     df_end.to_csv(loss_dir / "losses_end.csv", index=False)
     logger.info(f"Saved final loss values to {loss_dir / 'losses_end.csv'}")
 
+    losses_all = {
+        comp: losses[comp]["values"]
+        for comp in losses
+        if isinstance(losses.get(comp), dict) and "values" in losses[comp]
+    }
+    with open(loss_dir / "losses_all.json", "w") as f:
+        json.dump(losses_all, f, indent=2)
+    logger.info(f"Saved all loss values to {loss_dir / 'losses_all.json'}")
+
     return losses_after_last_epoch
 
 
@@ -123,7 +133,7 @@ def create_loss_plots(losses, loss_dir):
 
     loss_dir.mkdir(parents=True, exist_ok=True)
 
-    loss_fig_path = loss_dir / "loss–curves-weighted.png"
+    loss_fig_path = loss_dir / "loss–curves-weighted.pdf"
     plt.figure()
     # Plot individual components + total
     epochs = list(range(len(losses["total-weighted"])))
@@ -201,12 +211,12 @@ def create_loss_plots(losses, loss_dir):
         y = losses[comp]["values"]
         plt.plot(epochs, y, label=comp, linewidth=1)
         plt.xlabel("Epoch")
-        plt.ylabel("Loss")
-        plt.title(f"Loss: {comp} - unweighted")
+        plt.ylabel("Loss Value")
+        plt.title(f"Loss curve: L_{comp} - unweighted")
         plt.grid(True)
         plt.legend()
         plt.tight_layout()
-        out_path = loss_dir / f"{comp}.png"
+        out_path = loss_dir / f"{comp}.pdf"
         plt.savefig(str(out_path))
         plt.close()
         logger.info(f"Saved per-loss plot to {out_path}")

@@ -1,7 +1,8 @@
 import logging
 import argparse
 from pathlib import Path
-from ..metrics import run_all_shared_boxplots
+from ..utils.io import csv_to_anndata
+from ..metrics import run_all_shared_boxplots, run_all_permutation_boxplots
 from ..metrics import run_all_metrics
 from .run_tangram import tangram_align_data
 
@@ -46,25 +47,11 @@ if __name__ == "__main__":
         output_folder.mkdir(parents=True, exist_ok=True)
         logging.info(f"Created output folder: {output_folder}")
 
-    # If output folder not empty, error
-    if any(output_folder.iterdir()):
-        logging.error(
-            f"Output folder is not empty: {output_folder}. Please provide an empty folder."
-        )
-        exit(1)
-
     # If metrics folder does not exist, create it
     metrics_folder = Path(args.metrics_folder)
     if not metrics_folder.exists():
         metrics_folder.mkdir(parents=True, exist_ok=True)
         logging.info(f"Created metrics folder: {metrics_folder}")
-
-    # If metrics folder not empty, error
-    if any(metrics_folder.iterdir()):
-        logging.error(
-            f"metrics_folder is not empty: {metrics_folder}. Please provide an empty folder."
-        )
-        exit(1)
 
     logging.info("Run 1/6: Prob, individual cells")
     output_path = Path(args.output_folder) / "prob_cells_GEP.csv"
@@ -77,14 +64,16 @@ if __name__ == "__main__":
         cell_type_key="cellType",
         output_path=output_path,
     )
+    # predicted_gep = csv_to_anndata(output_path, transpose=False)  # If already computed
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "prob_cells",
         result_gep=predicted_gep,
-        run_permutation_tests=False,
+        run_permutation_tests=True,
     )
 
     logging.info("Run 2/6: Prob, Major cell types")
+    output_path = Path(args.output_folder) / "prob_celltype_major_GEP.csv"
     predicted_gep = tangram_align_data(
         args.dataset,
         normalize_and_log=args.normalize_and_log,
@@ -92,16 +81,18 @@ if __name__ == "__main__":
         compute_marker_genes=False,
         map_clusters=True,
         cell_type_key="cellType",
-        output_path=Path(args.output_folder) / "prob_celltype_major_GEP.csv",
+        output_path=output_path,
     )
+    # predicted_gep = csv_to_anndata(output_path, transpose=False) # If already computed
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "prob_celltype_major",
         result_gep=predicted_gep,
-        run_permutation_tests=False,
+        run_permutation_tests=True,
     )
 
     logging.info("Run 3/6: Prob, Minor cell types")
+    output_path = Path(args.output_folder) / "prob_celltype_minor_GEP.csv"
     predicted_gep = tangram_align_data(
         args.dataset,
         normalize_and_log=args.normalize_and_log,
@@ -109,16 +100,18 @@ if __name__ == "__main__":
         compute_marker_genes=False,
         map_clusters=True,
         cell_type_key="cellTypeMinor",
-        output_path=Path(args.output_folder) / "prob_celltype_minor_GEP.csv",
+        output_path=output_path,
     )
+    # predicted_gep = csv_to_anndata(output_path, transpose=False)  # If already computed
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "prob_celltype_minor",
         result_gep=predicted_gep,
-        run_permutation_tests=False,
+        run_permutation_tests=True,
     )
 
     logging.info("Run 4/6: Det, individual cells")
+    output_path = Path(args.output_folder) / "det_cells_GEP.csv"
     predicted_gep = tangram_align_data(
         args.dataset,
         normalize_and_log=args.normalize_and_log,
@@ -126,16 +119,18 @@ if __name__ == "__main__":
         compute_marker_genes=False,
         map_clusters=False,
         cell_type_key="cellType",
-        output_path=Path(args.output_folder) / "det_cells_GEP.csv",
+        output_path=output_path,
     )
+    # predicted_gep = csv_to_anndata(output_path, transpose=False)  # If already computed
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "det_cells",
         result_gep=predicted_gep,
-        run_permutation_tests=False,
+        run_permutation_tests=True,
     )
 
     logging.info("Run 5/6: Det, Major cell types")
+    output_path = Path(args.output_folder) / "det_celltype_major_GEP.csv"
     predicted_gep = tangram_align_data(
         args.dataset,
         normalize_and_log=args.normalize_and_log,
@@ -143,16 +138,18 @@ if __name__ == "__main__":
         compute_marker_genes=False,
         map_clusters=True,
         cell_type_key="cellType",
-        output_path=Path(args.output_folder) / "det_celltype_major_GEP.csv",
+        output_path=output_path,
     )
+    # predicted_gep = csv_to_anndata(output_path, transpose=False)  # If already computed
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "det_celltype_major",
         result_gep=predicted_gep,
-        run_permutation_tests=False,
+        run_permutation_tests=True,
     )
 
     logging.info("Run 6/6: Det, Minor cell types")
+    output_path = Path(args.output_folder) / "det_celltype_minor_GEP.csv"
     predicted_gep = tangram_align_data(
         args.dataset,
         normalize_and_log=args.normalize_and_log,
@@ -160,13 +157,14 @@ if __name__ == "__main__":
         compute_marker_genes=False,
         map_clusters=True,
         cell_type_key="cellTypeMinor",
-        output_path=Path(args.output_folder) / "det_celltype_minor_GEP.csv",
+        output_path=output_path,
     )
+    # predicted_gep = csv_to_anndata(output_path, transpose=False)  # If already computed
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "det_celltype_minor",
         result_gep=predicted_gep,
-        run_permutation_tests=False,
+        run_permutation_tests=True,
     )
 
     # Create shared boxplots
@@ -174,15 +172,28 @@ if __name__ == "__main__":
     metric_folder_shared.mkdir(parents=True, exist_ok=True)
     folders = [
         "det_cells",
-        "det_celltype_major",
         "det_celltype_minor",
+        "det_celltype_major",
         "prob_cells",
-        "prob_celltype_major",
         "prob_celltype_minor",
+        "prob_celltype_major",
+    ]
+    labels = [
+        "Cell - det.",
+        "Minor cell state - det.",
+        "Major cell state - det.",
+        "Cell - prob.",
+        "Minor cell state - prob.",
+        "Major cell state - prob.",
     ]
     # Run shared metrics
     run_all_shared_boxplots.main(
         [metrics_folder / fol for fol in folders],
-        folders,
+        labels,
+        metric_folder_shared,
+    )
+    run_all_permutation_boxplots.main(
+        [metrics_folder / fol for fol in folders],
+        labels,
         metric_folder_shared,
     )

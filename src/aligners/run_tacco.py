@@ -1,4 +1,6 @@
 import os
+from pathlib import Path
+
 import tacco as tc
 import pandas as pd
 import numpy as np
@@ -13,7 +15,7 @@ def tacco_align_data(
     dataset_folder: str,
     deterministic_mapping: bool,
     cell_type_key: str,
-    output_path: str,
+    output_path: Path,
 ) -> AnnData:
     """
     Run TACCO alignment on a prepared dataset in the given folder.

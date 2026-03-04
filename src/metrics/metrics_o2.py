@@ -222,7 +222,7 @@ def generate_box_plot_metrics_per_gene(
         plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=9)
 
         if output_folder:
-            plt.savefig(output_folder / f"o2_0-1_metrics.png", bbox_inches="tight")
+            plt.savefig(output_folder / f"o2_0-1_metrics.pdf", bbox_inches="tight")
         else:
             plt.show()
 
@@ -254,7 +254,7 @@ def generate_box_plot_metrics_per_gene(
             plt.setp(ax.get_xticklabels(), rotation=45, ha="right", fontsize=9)
 
         if output_folder:
-            plt.savefig(output_folder / f"o2_{col}.png", bbox_inches="tight")
+            plt.savefig(output_folder / f"o2_{col}.pdf", bbox_inches="tight")
         else:
             plt.show()
         plt.close(fig)
@@ -325,7 +325,7 @@ def generate_box_plot_metrics_per_spot(
             output_folder = Path(output_folder)
             output_folder.mkdir(parents=True, exist_ok=True)
             plt.savefig(
-                output_folder / f"o2_spots_0-1_metrics.png", bbox_inches="tight"
+                output_folder / f"o2_spots_0-1_metrics.pdf", bbox_inches="tight"
             )
         else:
             plt.show()
@@ -358,7 +358,7 @@ def generate_box_plot_metrics_per_spot(
         if output_folder:
             output_folder = Path(output_folder)
             output_folder.mkdir(parents=True, exist_ok=True)
-            plt.savefig(output_folder / f"o2_spots_{col}.png", bbox_inches="tight")
+            plt.savefig(output_folder / f"o2_spots_{col}.pdf", bbox_inches="tight")
         else:
             plt.show()
         plt.close(fig)
@@ -564,7 +564,7 @@ def generate_spatial_distribution_plots_for_some_genes(
         cossim_val = float(adata_predicted_z.var.at[gene, "cossim"])
         output_path = (
             metrics_folder_spatial_per_gene
-            / f"{cossim_val:.2f}_{gene}_spatial_distribution.png"
+            / f"{cossim_val:.2f}_{gene}_spatial_distribution.pdf"
         )
         generate_gene_spatial_distribution_plot(
             adata_z, adata_predicted_z, gene_name=gene, output_path=output_path

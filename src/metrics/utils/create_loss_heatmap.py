@@ -111,9 +111,9 @@ def plot_heatmap(ax, matrix, state_axis, spot_axis, title):
     ax.set_yticks(range(len(spot_axis)))
     ax.set_yticklabels([f"{v:.3g}" for v in spot_axis])
 
-    ax.set_xlabel("λ_state_entropy")
-    ax.set_ylabel("λ_spot_entropy")
-    ax.set_title(title)
+    ax.set_xlabel("λ_state_entropy", fontsize=13)
+    ax.set_ylabel("λ_spot_entropy", fontsize=13)
+    ax.set_title(title, fontsize=14)
 
     for i in range(matrix.shape[0]):
         for j in range(matrix.shape[1]):
@@ -125,7 +125,7 @@ def plot_heatmap(ax, matrix, state_axis, spot_axis, title):
                     f"{val:.2f}",
                     ha="center",
                     va="center",
-                    fontsize=7,
+                    fontsize=11,
                     color="white",
                 )
 
@@ -155,17 +155,17 @@ def main():
 
     fig, axes = plt.subplots(1, 3, figsize=(15, 5))
 
-    plot_heatmap(axes[0], L1_plot, state_axis, spot_axis, "Final L1 (rec_spot)")
-    plot_heatmap(axes[1], L4_plot, state_axis, spot_axis, "Final L4 (state_entropy)")
-    plot_heatmap(axes[2], L5_plot, state_axis, spot_axis, "Final L5 (spot_entropy)")
+    plot_heatmap(axes[0], L1_plot, state_axis, spot_axis, "L_rec_spot")
+    plot_heatmap(axes[1], L4_plot, state_axis, spot_axis, "L_state_entropy")
+    plot_heatmap(axes[2], L5_plot, state_axis, spot_axis, "L_spot_entropy")
 
     plt.tight_layout()
 
-    plt.show()
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_path, dpi=150)
+    print(f"Saved heatmap to {output_path}")
 
-    # output_path.parent.mkdir(parents=True, exist_ok=True)
-    # plt.savefig(output_path, dpi=150)
-    # print(f"Saved heatmap to {output_path}")
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -176,6 +176,6 @@ if __name__ == "__main__":
     Usage:
         python -m MPA_Code.metrics.utils.create_loss_heatmap \
             -r <results_folder> \
-            -o <output.png>
+            -o <output.pdf>
     """
     main()

@@ -336,24 +336,24 @@ def main(
         # Crate some diagrams on metrics of scRNA
         create_norms_histograms(
             res_scrna,
-            out_path=scrna_dir / "scRNA_norms_histogram.png",
+            out_path=scrna_dir / "scRNA_norms_histogram.pdf",
             show=False,
             bins=100,
         )
 
         create_log_norms_histograms(
             res_scrna,
-            out_path=scrna_dir / "scRNA_log_norms_histogram.png",
+            out_path=scrna_dir / "scRNA_log_norms_histogram.pdf",
             show=False,
             bins=100,
         )
 
         create_norms_boxplots(
-            res_scrna, out_path=scrna_dir / "scRNA_norms_boxplot.png", show=False
+            res_scrna, out_path=scrna_dir / "scRNA_norms_boxplot.pdf", show=False
         )
 
         create_log_norms_boxplots(
-            res_scrna, out_path=scrna_dir / "scRNA_log_norms_boxplot.png", show=False
+            res_scrna, out_path=scrna_dir / "scRNA_log_norms_boxplot.pdf", show=False
         )
 
     # Compute metrics for o1
@@ -380,15 +380,15 @@ def main(
 
     # Crate some diagrams on o1 metrics
     create_norms_histograms(
-        res, out_path=metrics_dir / "norms_histogram.png", show=False, bins=100
+        res, out_path=metrics_dir / "norms_histogram.pdf", show=False, bins=100
     )
 
     create_log_norms_histograms(
-        res, out_path=metrics_dir / "log_norms_histogram.png", show=False, bins=100
+        res, out_path=metrics_dir / "log_norms_histogram.pdf", show=False, bins=100
     )
 
-    create_norms_boxplots(res, out_path=metrics_dir / "norms_boxplot.png", show=False)
+    create_norms_boxplots(res, out_path=metrics_dir / "norms_boxplot.pdf", show=False)
 
     create_log_norms_boxplots(
-        res, out_path=metrics_dir / "log_norms_boxplot.png", show=False
+        res, out_path=metrics_dir / "log_norms_boxplot.pdf", show=False
     )

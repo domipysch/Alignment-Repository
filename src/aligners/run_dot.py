@@ -2,6 +2,7 @@ import subprocess
 import argparse
 import os
 import shutil
+from pathlib import Path
 
 R_SCRIPT = os.path.join(os.path.dirname(__file__), "run_dot.R")
 
@@ -23,7 +24,7 @@ def dot_align_data(
     mode: str,
     mapping_mode: str,
     cell_type_key: str,
-    output_path: str,
+    output_path: Path,
 ):
     """
     Run DOT alignment by calling run_dot.R via Rscript.

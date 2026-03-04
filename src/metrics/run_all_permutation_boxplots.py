@@ -76,7 +76,7 @@ def main(metrics_paths, labels, output_folder):
         ],
         labels,
         "o2 permutation test across runs",
-        output_folder / "o2_permutation.png",
+        output_folder / "o2_permutation.pdf",
     )
 
     # Create shared boxplot for permutation test o4
@@ -84,7 +84,7 @@ def main(metrics_paths, labels, output_folder):
         [path / "o4" / "knn" / "permutation_test.json" for path in metrics_paths],
         labels,
         "o4 permutation test across runs",
-        output_folder / "o4_permutation.png",
+        output_folder / "o4_permutation.pdf",
     )
 
 

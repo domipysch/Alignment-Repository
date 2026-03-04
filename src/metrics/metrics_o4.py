@@ -544,7 +544,7 @@ def visualize_tangram_refined_metrics(
     plt.tight_layout()
 
     if output_folder:
-        plt.savefig(output_folder / f"o4_tg_ref_metrics.png", bbox_inches="tight")
+        plt.savefig(output_folder / f"o4_tg_ref_metrics.pdf", bbox_inches="tight")
     else:
         plt.show()
 
@@ -705,7 +705,7 @@ def create_box_plots_from_edge_annots(
 
     plt.tight_layout()
     if output_folder:
-        plt.savefig(output_folder / f"o4_edges_box_plots.png", bbox_inches="tight")
+        plt.savefig(output_folder / f"o4_edges_box_plots.pdf", bbox_inches="tight")
     else:
         plt.show()
 
@@ -817,7 +817,7 @@ def plot_edge_cossim_spatial(
     plt.tight_layout()
 
     if output_folder:
-        plt.savefig(output_folder / f"o4_edges_spatial_plots.png", bbox_inches="tight")
+        plt.savefig(output_folder / f"o4_edges_spatial_plots.pdf", bbox_inches="tight")
     else:
         plt.show()
 

@@ -96,27 +96,27 @@ def main(metrics_paths: list[Path], labels: list[str], output_folder: Path):
     create_shared_boxplot(
         [path / "o2" / "boxplots_per_gene" / "cossim.json" for path in metrics_paths],
         labels,
-        "o2 across runs",
+        "Metric for objective O2",
         "Genewise cosine similarity",
-        output_path=output_folder / "o2_genewise_overall.png",
+        output_path=output_folder / "o2_genewise_overall.pdf",
     )
 
     # Create shared boxplot for o2, spotwise
     create_shared_boxplot(
         [path / "o2" / "boxplots_per_spot" / "cossim.json" for path in metrics_paths],
         labels,
-        "o2 across runs",
+        "Metric for objective O2",
         "Spotwise cosine similarity",
-        output_path=output_folder / "o2_spotwise_overall.png",
+        output_path=output_folder / "o2_spotwise_overall.pdf",
     )
 
     # Create shared boxplot for o4
     create_shared_boxplot(
         [path / "o4" / "knn" / "cossim.json" for path in metrics_paths],
         labels,
-        "o4 across runs",
+        "Metric for objective O4",
         "Custom locality metric",
-        output_path=output_folder / "o4_overall.png",
+        output_path=output_folder / "o4_overall.pdf",
     )
 
 

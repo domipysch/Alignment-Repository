@@ -3,23 +3,19 @@ mapping:
 graph:
   type: knn
   k:
-    - 3
+    - 4
 model:
   d:
-    - 32
+    - 16
   enc_hidden_dim:
     - 64
   dec_hidden_dim:
     - 256
   K:
-    - 20
+    - 10
 training:
   lr:
-#    - 0.001
-#    - 0.002
-#    - 0.005
     - 0.008
-#    - 0.010
   epochs:
     - 1000
   dropout_decoder:
@@ -30,8 +26,26 @@ training:
     - true
 loss_weights:
   - lambda_rec_spot: 1.0
-    lambda_rec_gene: 1.0
+    lambda_rec_gene: 0
     lambda_rec_state: 0
     lambda_clust: 0
-    lambda_state_entropy: 0.15
-    lambda_spot_entropy: 0.08
+    lambda_state_entropy: 0.1
+    lambda_spot_entropy: 0
+  - lambda_rec_spot: 1.0
+    lambda_rec_gene: 0
+    lambda_rec_state: 0
+    lambda_clust: 0
+    lambda_state_entropy: 0.1
+    lambda_spot_entropy: 0.01
+  - lambda_rec_spot: 1.0
+    lambda_rec_gene: 0
+    lambda_rec_state: 0
+    lambda_clust: 0
+    lambda_state_entropy: 0.1
+    lambda_spot_entropy: 0.1
+  - lambda_rec_spot: 1.0
+    lambda_rec_gene: 0
+    lambda_rec_state: 0
+    lambda_clust: 0
+    lambda_state_entropy: 0.1
+    lambda_spot_entropy: 1.0

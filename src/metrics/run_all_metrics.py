@@ -31,9 +31,9 @@ def main(
 
     """
     # Run metrics computations
-    # main1(dataset, result_gep, metrics) . temp. todo. revert
-    # main2(dataset, result_gep, metrics)
-    # main4(dataset, result_gep, metrics)
+    main1(dataset, result_gep, metrics)
+    main2(dataset, result_gep, metrics)
+    main4(dataset, result_gep, metrics)
 
     # Run permutation tests
     if run_permutation_tests:

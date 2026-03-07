@@ -75,7 +75,9 @@ def create_shared_boxplot(
     # --------------------------------------------------------
 
     # Create boxplot
-    plt.figure(figsize=(10, 6))
+    n_boxes = len(paths_to_jsons)
+    fig_width = max(6.0, n_boxes * 1.5)
+    plt.figure(figsize=(fig_width, 6))
     plt.boxplot(all_data, tick_labels=labls)
     plt.ylabel(ylabel, fontsize=label_fontsize)
     plt.title(title, fontsize=title_fontsize)

@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 plt.rcParams.update({"font.size": 14})
 
 
-def combined_boxplot(json_paths, labels, title, output: Path):
+def combined_boxplot(json_paths, labels, ylabel, title, output: Path):
     """
     Create one boxplot from multiple permutation test JSON files.
     (e.g. per method: all 6 configs)
@@ -56,7 +56,7 @@ def combined_boxplot(json_paths, labels, title, output: Path):
     ax.set_title(title)
     # explizite Fontgrößen für xticks und ylabel
     ax.set_xticklabels(names, rotation=45, ha="right", fontsize=12)
-    ax.set_ylabel("T = Sum of custom locality metric", fontsize=14)
+    ax.set_ylabel(ylabel, fontsize=14)
     ax.grid(axis="y", linestyle="--", alpha=0.4)
     plt.tight_layout()
 
@@ -75,6 +75,7 @@ def main(metrics_paths, labels, output_folder):
             for path in metrics_paths
         ],
         labels,
+        "T = Sum of cos sim",
         "o2 permutation test across runs",
         output_folder / "o2_permutation.pdf",
     )
@@ -83,6 +84,7 @@ def main(metrics_paths, labels, output_folder):
     combined_boxplot(
         [path / "o4" / "knn" / "permutation_test.json" for path in metrics_paths],
         labels,
+        "T = Sum of custom locality metric",
         "o4 permutation test across runs",
         output_folder / "o4_permutation.pdf",
     )

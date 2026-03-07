@@ -171,20 +171,20 @@ if __name__ == "__main__":
     metric_folder_shared = metrics_folder / "shared"
     metric_folder_shared.mkdir(parents=True, exist_ok=True)
     folders = [
-        "det_cells",
-        "det_celltype_minor",
-        "det_celltype_major",
         "prob_cells",
+        "det_cells",
         "prob_celltype_minor",
+        "det_celltype_minor",
         "prob_celltype_major",
+        "det_celltype_major",
     ]
     labels = [
-        "Cell - det.",
-        "Minor cell state - det.",
-        "Major cell state - det.",
         "Cell - prob.",
+        "Cell - det.",
         "Minor cell state - prob.",
+        "Minor cell state - det.",
         "Major cell state - prob.",
+        "Major cell state - det.",
     ]
     # Run shared metrics
     run_all_shared_boxplots.main(

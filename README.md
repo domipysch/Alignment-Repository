@@ -69,7 +69,7 @@ different conda environments have to be created for each method.
 ### AlternativeIdea
 
 ```bash
-conda env create -f alternative_idea/environment.yml
+conda env create -f src/alternative_idea/environment.yml
 conda activate alternative_idea_env
 ```
 

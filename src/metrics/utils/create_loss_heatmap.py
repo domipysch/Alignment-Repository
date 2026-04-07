@@ -14,7 +14,7 @@ def load_summary(results_dir: Path) -> dict:
         results_dir: Path to the experiment results folder containing summary.csv.
 
     Returns:
-        Dict mapping run_id (str) to a dict with keys 'L1', 'L4', 'L5' (floats).
+        Dict mapping run_id (str) to a dict with keys 'L1', 'L2', 'L5', 'L6' (floats).
     """
     summary_path = results_dir / "summary.csv"
     df = pd.read_csv(summary_path)
@@ -23,8 +23,9 @@ def load_summary(results_dir: Path) -> dict:
         run_id = str(int(row["id"]))
         result[run_id] = {
             "L1": float(row["L1"]),
-            "L4": float(row["L4"]),
+            "L2": float(row["L2"]),
             "L5": float(row["L5"]),
+            "L6": float(row["L6"]),
         }
     return result
 
@@ -56,7 +57,7 @@ def build_grid(results_dir: Path, summary: dict) -> tuple:
         summary: Dict mapping run_id to loss dict, as returned by load_summary.
 
     Returns:
-        Tuple (state_axis, spot_axis, L1_grid, L4_grid, L5_grid), where the grids
+        Tuple (state_axis, spot_axis, L1_grid, L2_grid, L5_grid, L6_grid), where the grids
         are 2D arrays of shape (n_state_vals, n_spot_vals).
     """
     state_vals = set()
@@ -78,18 +79,20 @@ def build_grid(results_dir: Path, summary: dict) -> tuple:
     spot_idx = {v: i for i, v in enumerate(spot_axis)}
 
     L1_grid = np.full((n_state, n_spot), np.nan)
-    L4_grid = np.full((n_state, n_spot), np.nan)
+    L2_grid = np.full((n_state, n_spot), np.nan)
     L5_grid = np.full((n_state, n_spot), np.nan)
+    L6_grid = np.full((n_state, n_spot), np.nan)
 
     for run_id, losses in summary.items():
         state_entropy, spot_entropy = run_params[run_id]
         i = state_idx[state_entropy]
         j = spot_idx[spot_entropy]
         L1_grid[i, j] = losses["L1"]
-        L4_grid[i, j] = losses["L4"]
+        L2_grid[i, j] = losses["L2"]
         L5_grid[i, j] = losses["L5"]
+        L6_grid[i, j] = losses["L6"]
 
-    return state_axis, spot_axis, L1_grid, L4_grid, L5_grid
+    return state_axis, spot_axis, L1_grid, L2_grid, L5_grid, L6_grid
 
 
 def plot_heatmap(ax, matrix, state_axis, spot_axis, title):
@@ -132,7 +135,7 @@ def plot_heatmap(ax, matrix, state_axis, spot_axis, title):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Plot loss heatmaps for grid search over L4/L5 weights."
+        description="Plot loss heatmaps for grid search over L5/L6 weights."
     )
     parser.add_argument(
         "-r", "--results", required=True, help="Path to experiment results folder"
@@ -146,18 +149,22 @@ def main():
     output_path = Path(args.output)
 
     summary = load_summary(results_dir)
-    state_axis, spot_axis, L1_grid, L4_grid, L5_grid = build_grid(results_dir, summary)
+    state_axis, spot_axis, L1_grid, L2_grid, L5_grid, L6_grid = build_grid(
+        results_dir, summary
+    )
 
     # Transpose so rows=spot_entropy (y-axis), cols=state_entropy (x-axis)
     L1_plot = L1_grid.T
-    L4_plot = L4_grid.T
+    L2_plot = L2_grid.T
     L5_plot = L5_grid.T
+    L6_plot = L6_grid.T
 
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    fig, axes = plt.subplots(1, 4, figsize=(20, 5))
 
     plot_heatmap(axes[0], L1_plot, state_axis, spot_axis, "L_rec_spot")
-    plot_heatmap(axes[1], L4_plot, state_axis, spot_axis, "L_state_entropy")
-    plot_heatmap(axes[2], L5_plot, state_axis, spot_axis, "L_spot_entropy")
+    plot_heatmap(axes[1], L2_plot, state_axis, spot_axis, "L_rec_gene")
+    plot_heatmap(axes[2], L5_plot, state_axis, spot_axis, "L_state_entropy")
+    plot_heatmap(axes[3], L6_plot, state_axis, spot_axis, "L_spot_entropy")
 
     plt.tight_layout()
 

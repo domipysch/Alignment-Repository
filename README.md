@@ -99,7 +99,7 @@ Rscript -e "devtools::install_github('saezlab/DOT')"
 
 ## Usage
 
-All commands are run from the `Code/` directory.
+All commands are run from the root directory of this repository.
 
 ### Running a Baseline Aligner
 

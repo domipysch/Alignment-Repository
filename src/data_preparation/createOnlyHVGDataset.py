@@ -1,54 +1,12 @@
 # Creates a derived dataset containing only the top N highly variable genes (HVGs)
-# from the scRNA-seq data. ST data files are copied unchanged. Shared genes that are
+# from the scRNA-seq data. ST data is copied unchanged. Shared genes that are
 # not among the top HVGs are appended to the selection to preserve cross-modal overlap.
+# Reads from sc.h5ad + st.h5ad and writes sc.h5ad + st.h5ad.
 
 import os
-import pandas as pd
+import shutil
 import anndata as ad
-from scipy.sparse import issparse
 import scanpy as sc
-
-
-def load_sc_adata(dataset_folder: str, cell_type_keys: list[str]) -> ad.AnnData:
-    """
-    Load single-cell data from dataset folder into an AnnData object.
-
-    Args:
-        dataset_folder: Absolute path to dataset folder.
-        cell_type_keys: List of column names in scData_Cells.csv to load as cell annotations.
-
-    Returns:
-        ad.AnnData: Single-cell AnnData object (C x G)
-    """
-    # Cells = Rows, Genes = Columns
-    df = pd.read_csv(os.path.join(dataset_folder, "scData_GEP.csv"), index_col=0)
-    adata_sc = ad.AnnData(df.T)
-    # Load cell types as annotation, if available
-    cells = pd.read_csv(os.path.join(dataset_folder, "scData_Cells.csv"))
-    for cell_type_key in cell_type_keys:
-        if cell_type_key in cells.columns:
-            adata_sc.obs[cell_type_key] = cells[cell_type_key].values
-    return adata_sc
-
-
-def load_st_adata(dataset_folder: str) -> ad.AnnData:
-    """
-    Load ST data from dataset folder into an AnnData object.
-
-    Args:
-        dataset_folder: Absolute path to dataset folder.
-
-    Returns:
-        ad.AnnData: ST AnnData object (S x G)
-    """
-    # Spots = Rows, Genes = Columns
-    df = pd.read_csv(os.path.join(dataset_folder, "stData_GEP.csv"), index_col=0)
-    adata_st = ad.AnnData(df.T)
-    # Load spot coordinates
-    coords = pd.read_csv(os.path.join(dataset_folder, "stData_Spots.csv"), index_col=0)
-    adata_st.obsm["spatial"] = coords[["cArray0", "cArray1"]].values
-    return adata_st
-
 
 if __name__ == "__main__":
 
@@ -58,34 +16,31 @@ if __name__ == "__main__":
     )
     N = 2000
 
-    """ Create dataset from full scRNA + ST dataset """
+    """ Load datasets """
 
-    # 1. Load scRNA & ST datasets
-    scData = load_sc_adata(dataset_from, ["cellType", "cellTypeMinor"])  # C x G
+    scData = ad.read_h5ad(os.path.join(dataset_from, "sc.h5ad"))  # C x G
     print("scRNA Data loaded")
-    stData = load_st_adata(dataset_from)  # S x G
+    stData = ad.read_h5ad(os.path.join(dataset_from, "st.h5ad"))  # S x G
     print("ST Data loaded")
 
-    # 2. Split genes into shared and non-shared genes
+    """ Select top N HVGs, keeping all shared genes """
+
+    # Shared genes between scRNA and ST
     sharedGenes = scData.var_names.intersection(stData.var_names)
 
-    # 3. Create list of scRNA genes to keep (top N Highly Variable Genes)
-    # Restrict HVG selection to genes shared between scRNA and ST
+    # Compute HVGs on a normalized log-transformed copy
     scDataLog = scData.copy()
     sc.pp.normalize_total(scDataLog)
     sc.pp.log1p(scDataLog)
-
-    # Use scanpy to compute highly variable genes, requesting top N
-    # If there are fewer shared genes than N, scanpy will select up to that number
     sc.pp.highly_variable_genes(scDataLog, n_top_genes=N, inplace=True)
 
-    # Collect HVG gene names (var_names where 'highly_variable' is True)
     assert "highly_variable" in scDataLog.var.columns
     hvgs = list(scDataLog.var_names[scDataLog.var["highly_variable"].values])
 
     if len(hvgs) == 0:
         raise RuntimeError("No HVGs selected — check input data and N value")
 
+    # Append shared genes that were not selected as HVGs
     for sharedGene in sharedGenes:
         if sharedGene not in hvgs:
             print(
@@ -97,37 +52,18 @@ if __name__ == "__main__":
         len(hvgs),
     )
 
-    # 4. Create mini scRNA dataset
-    scData_HVG = scData[:, hvgs]
+    """ Create and save HVG-filtered scRNA dataset """
 
-    """ Save smaller dataset to disk """
+    scData_HVG = scData[:, hvgs].copy()
 
-    # 1. Save scData_Cells.csv
-    scCells_df = pd.DataFrame(index=scData_HVG.obs_names)
-    for col in scData_HVG.obs.columns:
-        scCells_df[col] = scData_HVG.obs[col].values
-    scCells_df.index.name = "cellID"
-    scCells_df.to_csv(os.path.join(dataset_to, "scData_Cells.csv"))
+    os.makedirs(dataset_to, exist_ok=True)
+    scData_HVG.write_h5ad(os.path.join(dataset_to, "sc.h5ad"))
+    print(f"Saved sc.h5ad: {scData_HVG.n_obs} cells x {scData_HVG.n_vars} genes")
 
-    # 2. Save scData_Genes.csv
-    scGenes_df = pd.DataFrame(index=scData_HVG.var_names)
-    scGenes_df.index.name = "geneID"
-    scGenes_df.to_csv(os.path.join(dataset_to, "scData_Genes.csv"))
+    """ Copy ST dataset unchanged """
 
-    # 3. Save scData_GEP.csv
-    scData_HVG = scData_HVG.copy().transpose()
-    scData_HVG_df = pd.DataFrame(
-        data=scData_HVG.X.toarray() if issparse(scData_HVG.X) else scData_HVG.X,
-        index=scData_HVG.obs_names,
-        columns=scData_HVG.var_names,
+    shutil.copy(
+        os.path.join(dataset_from, "st.h5ad"),
+        os.path.join(dataset_to, "st.h5ad"),
     )
-    scData_HVG_df.index.name = "GEP"
-    scData_HVG_df.to_csv(os.path.join(dataset_to, "scData_GEP.csv"))
-
-    # 4. Simply copy ST files (no change in genes)
-    stData_files = ["stData_Spots.csv", "stData_GEP.csv", "stData_Genes.csv"]
-    for file in stData_files:
-        src = os.path.join(dataset_from, file)
-        dst = os.path.join(dataset_to, file)
-        if os.path.exists(src):
-            os.system(f"cp {src} {dst}")
+    print("Copied st.h5ad unchanged")

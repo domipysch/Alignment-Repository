@@ -9,6 +9,7 @@ from anndata import AnnData
 from scipy.spatial import cKDTree, Delaunay
 from scipy.spatial.distance import cdist
 from .utils.dataset_query import get_z_real_and_predicted_data_only_shared_genes
+from ..utils.io import load_st_adata
 import warnings
 from .utils.distance_metrics import (
     cosine_similarity,
@@ -59,20 +60,15 @@ def create_spatial_graph(
     Edges get an attribute 'weight' with the euclidean distance.
     """
 
-    # Check if file exists
-    spots_path = dataset_folder / "stData_Spots.csv"
-    if not spots_path.exists():
-        raise FileNotFoundError(f"Spots Datei nicht gefunden: {spots_path}")
-
-    # Read file
-    df = pd.read_csv(spots_path, index_col=0, header=0)
+    adata_st = load_st_adata(dataset_folder)
 
     # Get spot ids
-    spot_ids = df.index.astype(str).tolist()
+    spot_ids = adata_st.obs_names.astype(str).tolist()
 
     # Get coordinates
-    xs = pd.to_numeric(df["cArray0"], errors="coerce").astype(float).tolist()
-    ys = pd.to_numeric(df["cArray1"], errors="coerce").astype(float).tolist()
+    spatial = adata_st.obsm["spatial"]
+    xs = spatial[:, 0].astype(float).tolist()
+    ys = spatial[:, 1].astype(float).tolist()
     if not (len(spot_ids) == len(xs) == len(ys)):
         raise ValueError("Längen der Spot-IDs und Koordinaten stimmen nicht überein.")
 
@@ -213,12 +209,8 @@ def binary_adjacency_matrix_from_graph(
     Returns:
     - A: pandas.DataFrame, shape (n_spots, n_spots), values 0/1, Index/Columns = spot_ids
     """
-    spots_path = dataset_folder / "stData_Spots.csv"
-    if not spots_path.exists():
-        raise FileNotFoundError(f"stData_Spots.csv nicht gefunden unter: {spots_path}")
-
-    df = pd.read_csv(spots_path, index_col=0, header=0)
-    spot_ids = df.index.astype(str).tolist()
+    adata_st = load_st_adata(dataset_folder)
+    spot_ids = adata_st.obs_names.astype(str).tolist()
     n = len(spot_ids)
     idx_map = {sid: i for i, sid in enumerate(spot_ids)}
 
@@ -229,7 +221,7 @@ def binary_adjacency_matrix_from_graph(
         su, sv = str(u), str(v)
         if su not in idx_map or sv not in idx_map:
             warnings.warn(
-                f"Kante ({su},{sv}) weist auf Spot-ID, die nicht in stData_Spots.csv enthalten ist. Ignoriere."
+                f"Kante ({su},{sv}) weist auf Spot-ID, die nicht in st.h5ad enthalten ist. Ignoriere."
             )
             continue
         i = idx_map[su]
@@ -261,18 +253,12 @@ def locality_matrix(
     Returns: pandas.DataFrame with Index/Columns = spot_ids (as strings) and dtype dtype.
     """
 
-    spots_path = dataset_folder / "stData_Spots.csv"
-    if not spots_path.exists():
-        raise FileNotFoundError(f"stData_Spots.csv nicht gefunden: {spots_path}")
-
-    df = pd.read_csv(spots_path, index_col=0, header=0)
-    spot_ids = df.index.astype(str).tolist()
+    adata_st = load_st_adata(dataset_folder)
+    spot_ids = adata_st.obs_names.astype(str).tolist()
     n = len(spot_ids)
 
-    # Coordinates expected in the same layout as in create_spatial_graph (fallbacks could be added)
-    xs = pd.to_numeric(df["cArray0"], errors="coerce").astype(float).values
-    ys = pd.to_numeric(df["cArray1"], errors="coerce").astype(float).values
-    coords = np.vstack([xs, ys]).T
+    spatial = adata_st.obsm["spatial"]
+    coords = spatial.astype(float)
 
     # Build distance matrix
     D = cdist(coords, coords, metric="euclidean")

@@ -5,41 +5,10 @@ import anndata as ad
 import pandas as pd
 import logging
 import json
-from ...utils.io import csv_to_anndata
+from ...utils.io import load_sc_adata, load_st_adata
 import matplotlib.pyplot as plt
 
 logger = logging.getLogger(__name__)
-
-
-def load_sc_adata(dataset_folder: Path) -> ad.AnnData:
-    """
-    Load single-cell data from dataset folder into an AnnData object.
-    Args:
-        dataset_folder: Absolute path to dataset folder
-    Returns:
-        ad.AnnData: Single-cell AnnData object (C x G)
-    """
-    logger.debug("Load scRNA data")
-    # In file: G x C, we want: C x G
-    return csv_to_anndata(dataset_folder / "scData_GEP.csv", transpose=True)
-
-
-def load_st_adata(dataset_folder: Path) -> ad.AnnData:
-    """
-    Load ST data from dataset folder into an AnnData object.
-    Args:
-        dataset_folder: Absolute path to dataset folder
-    Returns:
-        ad.AnnData: ST AnnData object (S x G)
-    """
-    logger.debug("Load ST data")
-    # In file: G x S, we want: S x G
-    adata_st = csv_to_anndata(dataset_folder / "stData_GEP.csv", transpose=True)
-    # Load spot coordinates
-    logger.debug("Load ST coordinates")
-    coords = pd.read_csv(dataset_folder / "stData_Spots.csv", index_col=0)
-    adata_st.obsm["spatial"] = coords[["cArray0", "cArray1"]].values
-    return adata_st
 
 
 def fmt_nonzero_4(x: float) -> str:

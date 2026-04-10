@@ -232,7 +232,7 @@ def main(
             with open(run_config_path, "w") as cf:
                 yaml.safe_dump(cfg_copy, cf, sort_keys=False)
 
-            result_path = run_dir / "result_GEP.csv"
+            result_path = run_dir / "result_GEP.h5ad"
 
             metric_dir = metric_folder / str(run_id)
             metric_dir.mkdir(parents=True, exist_ok=False)
@@ -251,7 +251,7 @@ def main(
                 losses_after_last_epoch = run_config(
                     dataset,
                     run_config_path,
-                    (run_dir / "gep.csv") if save_result else None,
+                    (run_dir / "gep.h5ad") if save_result else None,
                     (run_dir / "mapping.csv") if save_result else None,
                     metric_dir,
                     metric_dir_det if metric_dir_det is not None else "",

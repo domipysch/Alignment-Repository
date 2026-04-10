@@ -2,8 +2,8 @@ import argparse
 from pathlib import Path
 import logging
 import sys
+import anndata as ad
 from anndata import AnnData
-from ..utils.io import csv_to_anndata
 from .metrics_o1 import main as main1
 from .metrics_o2 import main as main2
 from .metrics_o4 import main as main4
@@ -62,5 +62,5 @@ if __name__ == "__main__":
     logger.info("Result file path: %s", args.result)
     logger.info("Metrics output folder: %s", args.metrics)
 
-    result_gep = csv_to_anndata(args.result, transpose=False)
+    result_gep = ad.read_h5ad(args.result)
     main(args.dataset, args.metrics, result_gep, run_permutation_tests=False)

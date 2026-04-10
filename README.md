@@ -26,40 +26,38 @@ src/
 
 ## Dataset Format
 
-Each dataset folder must contain the following files (see `sample_dataset/` for a reference example).
+Each dataset folder must contain two h5ad files (see `sample_dataset/` for a reference example).
 
-### scRNA data
+### `sc.h5ad` — scRNA-seq data
 
-**`scData_Cells.csv`** — One row per cell with cell type labels (if available).
+| Slot | Content |
+|------|---------|
+| `X` | Expression matrix (cells × genes, float32) |
+| `obs` | Cell metadata — index: `cellID`, columns include `cellType`, `cellTypeMinor` |
+| `var` | Gene metadata — index: `geneID` |
+
+### `st.h5ad` — Spatial transcriptomics data
+
+| Slot | Content |
+|------|---------|
+| `X` | Expression matrix (spots × genes, float32) |
+| `obs` | Spot metadata — index: `spotID` |
+| `var` | Gene metadata — index: `geneID` |
+| `obsm["spatial"]` | 2D array coordinates, shape (n_spots × 2): `[cArray0, cArray1]` |
+
+### Migrating from the legacy CSV format
+
+If you have existing datasets in the old 6-CSV format, convert them with:
+
+```bash
+conda activate alternative_idea_env
+
+# Convert a single dataset folder:
+python -m src.data_preparation.convert_csv_to_h5ad -d <dataset_folder>
+
+# Convert all subdirectories under a root folder:
+python -m src.data_preparation.convert_csv_to_h5ad -d <root_folder> --all
 ```
-cellID,cellType,cellTypeMinor
-CID4290A_ACGCAGCCACCACGTG,Endothelial,Endothelial ACKR1
-CID4290A_ACGCAGCCACCACGTG,N/A,N/A
-```
-
-**`scData_Genes.csv`** — One gene ID per row.
-```
-geneID
-BRCA1
-TP53
-```
-
-**`scData_GEP.csv`** — Full gene expression matrix, rows: genes, columns: cells. Gene and cell order must match `scData_Genes.csv` and `scData_Cells.csv` respectively.
-
-### Spatial data
-
-**`stData_Spots.csv`** — One row per spot with 2D array coordinates.
-```
-spotID,cArray0,cArray1
-TTAATGTAGACCAGGT-1,0,0
-```
-
-**`stData_Genes.csv`** — One gene ID per row (same format as `scData_Genes.csv`).
-
-**`stData_GEP.csv`** — Full gene expression matrix, rows: genes, columns: spots. Gene and spot order must match `stData_Genes.csv` and `stData_Spots.csv` respectively.
-
-> Note: Of course, the xxx_Genes.csv files do not provide any additional information, they are only there for convenience.
-> They are also not used in the code, since the genes are also present in the GEP files.
 
 ## Installation & Running
 

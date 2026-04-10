@@ -1,4 +1,5 @@
 import argparse
+import json
 import sys
 import os
 from pathlib import Path
@@ -9,6 +10,7 @@ import scanpy as sc
 import torch
 import torch.optim as optim
 import logging
+import numpy as np
 from anndata import AnnData
 from ..utils.io import anndata_to_csv
 from .src.utils import (
@@ -25,6 +27,21 @@ from .src.dataset import prepare_tensors_from_input
 from .src.utils import graph_type_from_config
 
 logger = logging.getLogger(__name__)
+
+
+def _arr_to_h5ad(
+    arr: np.ndarray,
+    path: Path,
+    obs_names: list,
+    var_names: list,
+) -> None:
+    """Save a 2D numpy array as an h5ad file with labelled obs and var axes."""
+    import numpy as np
+
+    adata = AnnData(X=arr.astype(np.float32))
+    adata.obs_names = obs_names
+    adata.var_names = var_names
+    adata.write_h5ad(path)
 
 
 def load_config(config_path: Path) -> tuple[dict, dict, dict, dict, dict]:
@@ -335,20 +352,59 @@ def alternative_idea_compute_mapping(
         # df = pd.DataFrame(C.detach().cpu().numpy())
         # df.to_csv(folder_intermediate / "C.csv", index=False)
 
+        K = B.shape[1]
+        state_names = [f"state_{i}" for i in range(K)]
+
         A_thresh = A.detach().cpu().clone()
         A_thresh[A_thresh < 0.1] = 0.0
         df_weight = pd.DataFrame(A_thresh.numpy())
         df_weight.to_csv(folder_intermediate / "A_thresh.csv", index=False)
+        _arr_to_h5ad(
+            A_thresh.numpy(),
+            folder_intermediate / "A_thresh.h5ad",
+            obs_names=adata_st.obs_names.tolist(),
+            var_names=adata_sc.obs_names.tolist(),
+        )
 
         B_thresh = B.detach().cpu().clone()
         B_thresh[B_thresh < 0.1] = 0.0
         df_weight = pd.DataFrame(B_thresh.numpy())
         df_weight.to_csv(folder_intermediate / "B_thresh.csv", index=False)
+        _arr_to_h5ad(
+            B_thresh.numpy(),
+            folder_intermediate / "B_thresh.h5ad",
+            obs_names=adata_sc.obs_names.tolist(),
+            var_names=state_names,
+        )
 
         C_thresh = C.detach().cpu().clone()
         C_thresh[C_thresh < 0.1] = 0.0
         df_weight = pd.DataFrame(C_thresh.numpy())
         df_weight.to_csv(folder_intermediate / "C_thresh.csv", index=False)
+        _arr_to_h5ad(
+            C_thresh.numpy(),
+            folder_intermediate / "C_thresh.h5ad",
+            obs_names=adata_st.obs_names.tolist(),
+            var_names=state_names,
+        )
+
+        B_used_mask = B_thresh.sum(dim=0) > 0
+        C_used_mask = C_thresh.sum(dim=0) > 0
+        state_usage = {
+            "B_used_count": int(B_used_mask.sum().item()),
+            "B_used_indices": B_used_mask.nonzero(as_tuple=False).squeeze(1).tolist(),
+            "C_used_count": int(C_used_mask.sum().item()),
+            "C_used_indices": C_used_mask.nonzero(as_tuple=False).squeeze(1).tolist(),
+        }
+        with open(folder_intermediate / "cell_state_usage.json", "w") as f:
+            json.dump(state_usage, f, indent=2)
+
+        assert set(state_usage["C_used_indices"]).issubset(
+            set(state_usage["B_used_indices"])
+        ), (
+            f"C_used_indices is not a subset of B_used_indices: "
+            f"C={state_usage['C_used_indices']}, B={state_usage['B_used_indices']}"
+        )
 
         # idx = torch.argmax(A, dim=1, keepdim=True)
         # A_argmax = torch.zeros_like(A).scatter_(1, idx, 1.0)
@@ -363,11 +419,26 @@ def alternative_idea_compute_mapping(
         # pd.DataFrame(C_argmax.detach().cpu().numpy()).to_csv(folder_intermediate / "C_argmax.csv", index=False)
 
         p = torch.mean(B, dim=0)
-        pd.DataFrame(p.detach().cpu().numpy()).to_csv(
-            folder_intermediate / "p.csv", index=False
+        p_np = p.detach().cpu().numpy()
+        pd.DataFrame(p_np.round(2)).to_csv(folder_intermediate / "p.csv", index=False)
+        _arr_to_h5ad(
+            p_np.reshape(1, -1),
+            folder_intermediate / "p.h5ad",
+            obs_names=["mean_cell_state_usage"],
+            var_names=state_names,
         )
 
-        # B_normalized = B / (torch.sum(B, dim=0) + 1e-6)  # (K x C)
+        q = torch.mean(C, dim=0)
+        q_np = q.detach().cpu().numpy()
+        pd.DataFrame(q_np.round(2)).to_csv(folder_intermediate / "q.csv", index=False)
+        _arr_to_h5ad(
+            q_np.reshape(1, -1),
+            folder_intermediate / "q.h5ad",
+            obs_names=["mean_spot_state_usage"],
+            var_names=state_names,
+        )
+
+        B_normalized = B / (torch.sum(B, dim=0) + 1e-6)
         # df_weight = pd.DataFrame(B_normalized.detach().cpu().numpy())
         # df_weight.to_csv(folder_intermediate / 'B_normalized.csv', index=False)
 
@@ -375,9 +446,28 @@ def alternative_idea_compute_mapping(
         # df = pd.DataFrame(M.detach().cpu().numpy())
         # df.to_csv(folder_intermediate / "M.csv", index=False)
 
-        # M_normalized = torch.matmul(B_normalized.t(), X)
-        # df = pd.DataFrame(M_normalized.detach().cpu().numpy())
-        # df.to_csv(folder_intermediate / "M_normalized.csv", index=False)
+        M_normalized = torch.matmul(B_normalized.t(), X)
+        M_np = M_normalized.detach().cpu().numpy()
+        df = pd.DataFrame(M_np)
+        df.to_csv(folder_intermediate / "M_normalized.csv", index=False)
+        _arr_to_h5ad(
+            M_np,
+            folder_intermediate / "M_normalized.h5ad",
+            obs_names=state_names,
+            var_names=adata_sc.var_names.tolist(),
+        )
+
+        c_used_idx = state_usage["C_used_indices"]
+        cell_states = M_np[c_used_idx, :]
+        pd.DataFrame(cell_states).to_csv(
+            folder_intermediate / "cell_states_gep.csv", index=False
+        )
+        _arr_to_h5ad(
+            cell_states,
+            folder_intermediate / "cell_states_gep.h5ad",
+            obs_names=[f"state_{i}" for i in c_used_idx],
+            var_names=adata_sc.var_names.tolist(),
+        )
 
         # Z_prime = torch.matmul(A, X)
         # df = pd.DataFrame(Z_prime.detach().cpu().numpy())
@@ -393,16 +483,32 @@ def alternative_idea_compute_mapping(
             argmax_idx = torch.argmax(B, dim=1, keepdim=True)
             B_argmax = torch.zeros_like(B)
             B_argmax.scatter_(1, argmax_idx, 1.0)
-            df_weight = pd.DataFrame(B_argmax.detach().cpu().numpy())
-            df_weight.to_csv(folder_intermediate / "B_argmax.csv", index=False)
+            B_argmax_np = B_argmax.detach().cpu().numpy()
+            pd.DataFrame(B_argmax_np).to_csv(
+                folder_intermediate / "B_argmax.csv", index=False
+            )
+            _arr_to_h5ad(
+                B_argmax_np,
+                folder_intermediate / "B_argmax.h5ad",
+                obs_names=adata_sc.obs_names.tolist(),
+                var_names=state_names,
+            )
 
             # C: Argmax per spot -> One-hot pro Zeile
             C_argmax = torch.matmul(A, B_argmax)
             argmax_idx = torch.argmax(C_argmax, dim=1, keepdim=True)
             C_argmax = torch.zeros_like(C_argmax)
             C_argmax.scatter_(1, argmax_idx, 1.0)
-            df_weight = pd.DataFrame(C_argmax.detach().cpu().numpy())
-            df_weight.to_csv(folder_intermediate / "C_argmax.csv", index=False)
+            C_argmax_np = C_argmax.detach().cpu().numpy()
+            pd.DataFrame(C_argmax_np).to_csv(
+                folder_intermediate / "C_argmax.csv", index=False
+            )
+            _arr_to_h5ad(
+                C_argmax_np,
+                folder_intermediate / "C_argmax.h5ad",
+                obs_names=adata_st.obs_names.tolist(),
+                var_names=state_names,
+            )
 
     logger.info("Alignment complete.")
     return A, B, losses
@@ -546,21 +652,16 @@ def main(
         training_config["use_cm"],
     )
 
-    # Step 5 (optional): Export predicted_spot_expressions to CSV
-    # - Rows: Genes
-    # - Columns: Spots
+    # Step 5 (optional): Export predicted_spot_expressions to h5ad
+    # Layout: obs = genes (G), var = spots (S)
     if output_path is not None:
-        logger.info(f"Write result GEP to CSV: {output_path}")
-        anndata_to_csv(
-            adata_prediction_prob,
-            output_path,
-            top_left_label="GEP",
-            format_func=fmt_nonzero_4,
-            uppercase_var_names=True,
-        )
+        output_path = Path(output_path).with_suffix(".h5ad")
+        logger.info(f"Write result GEP to h5ad: {output_path}")
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        adata_prediction_prob.write_h5ad(output_path)
         logger.info(f"Saved result GEP to {output_path}")
     else:
-        logger.debug("No output path provided, skipping CSV export.")
+        logger.debug("No output path provided, skipping h5ad export.")
 
     # Step 6 (optional): Apply one-hot encoding to mapping & repeat steps 4 & 5
     adata_prediction_det = None
@@ -586,17 +687,11 @@ def main(
                 output_path.stem + "_deterministic" + output_path.suffix
             )
 
-            logger.info(f"Write result GEP to CSV: {output_path_deterministic}")
-            anndata_to_csv(
-                adata_prediction_det,
-                output_path_deterministic,
-                top_left_label="GEP",
-                format_func=fmt_nonzero_4,
-                uppercase_var_names=True,
-            )
+            logger.info(f"Write result GEP to h5ad: {output_path_deterministic}")
+            adata_prediction_det.write_h5ad(output_path_deterministic)
             logger.info(f"Saved result GEP to {output_path_deterministic}")
         else:
-            logger.debug("No output path provided, skipping CSV export.")
+            logger.debug("No output path provided, skipping h5ad export.")
 
     # Step 7: Return result
     return adata_prediction_prob, adata_prediction_det, losses_after_last_epoch

@@ -2,7 +2,7 @@ from typing import List, Tuple
 from pathlib import Path
 import pandas as pd
 from anndata import AnnData
-from ...utils.io import csv_to_anndata
+from ...utils.io import load_sc_adata, load_st_adata
 
 
 def get_sc_genes(dataset_folder: Path) -> List[str]:
@@ -10,29 +10,12 @@ def get_sc_genes(dataset_folder: Path) -> List[str]:
     Get the list of all genes in the scRNA data of a given dataset.
 
     Args:
-        dataset_folder: Path to the dataset folder containing scData_Genes.csv.
+        dataset_folder: Path to the dataset folder containing sc.h5ad.
 
     Returns:
         List of gene ID strings in file order.
     """
-    csv_path = dataset_folder / "scData_Genes.csv"
-    if not csv_path.exists():
-        raise FileNotFoundError(f"scData_Genes.csv not found at: {csv_path}")
-
-    genes: List[str] = []
-    with csv_path.open("r", encoding="utf-8") as f:
-        for i, line in enumerate(f):
-            line = line.strip()
-            if not line:
-                continue
-            if i == 0 and line.lower().startswith("geneid"):
-                continue
-            if "," in line:
-                first = line.split(",", 1)[0]
-            else:
-                first = line
-            genes.append(first)
-    return genes
+    return load_sc_adata(dataset_folder).var_names.tolist()
 
 
 def get_st_genes(dataset_folder: Path) -> List[str]:
@@ -40,30 +23,12 @@ def get_st_genes(dataset_folder: Path) -> List[str]:
     Get the list of all genes in the ST data of a given dataset.
 
     Args:
-        dataset_folder: Path to the dataset folder containing stData_Genes.csv.
+        dataset_folder: Path to the dataset folder containing st.h5ad.
 
     Returns:
         List of gene ID strings in file order.
     """
-    csv_path = dataset_folder / "stData_Genes.csv"
-    if not csv_path.exists():
-        raise FileNotFoundError(f"stData_Genes.csv not found at: {csv_path}")
-
-    genes: List[str] = []
-    with csv_path.open("r", encoding="utf-8") as f:
-        for i, line in enumerate(f):
-            line = line.strip()
-            if not line:
-                continue
-            # Skip header
-            if i == 0 and line.lower().startswith("geneid"):
-                continue
-            if "," in line:
-                first = line.split(",", 1)[0]
-            else:
-                first = line
-            genes.append(first)
-    return genes
+    return load_st_adata(dataset_folder).var_names.tolist()
 
 
 def get_shared_genes(dataset_folder: Path) -> List[str]:
@@ -84,20 +49,15 @@ def get_shared_genes(dataset_folder: Path) -> List[str]:
 
 def get_cell_annotations(dataset_folder: Path) -> pd.DataFrame:
     """
-    Load cell annotations from scData_Annotations.csv of a given dataset.
+    Load cell annotations from sc.h5ad of a given dataset.
 
     Args:
-        dataset_folder: Path to the dataset folder containing scData_Annotations.csv.
+        dataset_folder: Path to the dataset folder containing sc.h5ad.
 
     Returns:
         DataFrame of cell annotations with cell IDs as index.
     """
-    csv_path = dataset_folder / "scData_Annotations.csv"
-    if not csv_path.exists():
-        raise FileNotFoundError(f"scData_Annotations.csv not found at: {csv_path}")
-
-    df_annotations = pd.read_csv(csv_path, header=0, index_col=0)
-    return df_annotations
+    return load_sc_adata(dataset_folder).obs
 
 
 def get_z_real_and_predicted_data_only_shared_genes(
@@ -107,18 +67,14 @@ def get_z_real_and_predicted_data_only_shared_genes(
     Load input ST data and predicted Z', filtered to shared marker genes only.
 
     Args:
-        dataset_folder: Path to the dataset folder containing stData_GEP.csv.
+        dataset_folder: Path to the dataset folder containing st.h5ad.
         result_gep: Predicted gene expression as AnnData (G x S).
 
     Returns:
         Tuple (st_shared, result_shared): both AnnData objects of shape (S x shared_G),
         aligned to the same set of shared genes in the same order.
     """
-    st_path = dataset_folder / "stData_GEP.csv"
-    if not st_path.exists():
-        raise FileNotFoundError(f"ST data file not found: {st_path}")
-
-    st_ad = csv_to_anndata(st_path, transpose=True)
+    st_ad = load_st_adata(dataset_folder)
     result_gep = result_gep.transpose()
 
     # Filter to shared marker genes, preserving the order from st_ad

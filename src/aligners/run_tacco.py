@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-
 import tacco as tc
 import pandas as pd
 import numpy as np
@@ -8,49 +7,65 @@ import logging
 from anndata import AnnData
 import argparse
 from scipy.sparse import issparse
-from .utils import load_sc_adata, load_st_adata, fmt_nonzero_4
+from ..utils.io import load_sc_adata, load_st_adata
 
 
 def tacco_align_data(
     dataset_folder: str,
     deterministic_mapping: bool,
-    cell_type_key: str,
-    output_path: Path,
+    map_cell_types: bool,
+    cell_type_key: str = "cellType",
+    output_path: Path = None,
 ) -> AnnData:
     """
     Run TACCO alignment on a prepared dataset in the given folder.
-    Saves predicted gene expression per spot (GEP) as CSV to output_path.
+    Saves predicted gene expression per spot (GEP) as h5ad to output_path.
 
     Args:
-        dataset_folder: Path to dataset folder
-        deterministic_mapping: Should the cell-to-spot mapping be turned deterministic before multiplication wit sc-data?
-            (one cell type per spot, one hot encoding)
-        cell_type_key: What cell type key to load from sc data as cell type annotation.
-        output_path: Full path where to save the resulting GEP CSV.
+        dataset_folder: Path to dataset folder.
+        deterministic_mapping: Convert the probabilistic mapping to one-hot (one cell/type per spot).
+        map_cell_types: If True, aggregate cells by cell_type_key before mapping.
+                        If False, map individual cells directly.
+        cell_type_key: obs column to use as annotation when map_cell_types=True.
+        output_path: Full path where to save the resulting GEP h5ad.
 
-    Returns: None
+    Returns:
+        AnnData with obs=genes, var=spots (G x S layout).
     """
     assert os.path.isdir(dataset_folder), f"Dataset folder not found: {dataset_folder}"
 
     logging.info("Load data")
-    adata_sc = load_sc_adata(dataset_folder, cell_type_key=cell_type_key)  # C x G
-    adata_st = load_st_adata(dataset_folder)  # S x G
+    adata_sc = load_sc_adata(Path(dataset_folder))  # C x G
+    adata_st = load_st_adata(Path(dataset_folder))  # S x G
+
+    # Determine which obs column to use as the annotation key for TACCO
+    if map_cell_types:
+        if cell_type_key not in adata_sc.obs.columns:
+            raise KeyError(
+                f"cell_type_key '{cell_type_key}' not found in obs columns "
+                f"{list(adata_sc.obs.columns)}."
+            )
+        annotation_col = cell_type_key
+    else:
+        # Map individual cells: expose obs_names (cellID) as a column
+        annotation_col = adata_sc.obs.index.name or "cellID"
+        adata_sc.obs[annotation_col] = adata_sc.obs_names.tolist()
 
     # Change the datatype to float32 to avoid potential issues with TACCO
     adata_sc.X = adata_sc.X.astype(np.float32)
     adata_st.X = adata_st.X.astype(np.float32)
 
     # Map with TACCO
-    logging.info("Align data with TACCO")
+    logging.info("Align data with TACCO (annotation_col=%s)", annotation_col)
     tc.tl.annotate(
         adata_st,
         adata_sc,
-        annotation_key="cell_subclass",
+        annotation_key=annotation_col,
         result_key="align_result",
     )
     # Mapping now in adata_st.obsm["align_result"]
 
-    # Compute mean per cell type (cells x genes -> types x genes)
+    # Compute mean expression per annotation group (cells x genes -> groups x genes)
     if issparse(adata_sc.X):
         Xsc = adata_sc.X.toarray()
     else:
@@ -58,7 +73,7 @@ def tacco_align_data(
     sc_obs = pd.DataFrame(
         Xsc, index=adata_sc.obs_names, columns=adata_sc.var_names
     )  # C x G
-    mean_expr = sc_obs.groupby(adata_sc.obs["cell_subclass"]).mean()  # T x G
+    mean_expr = sc_obs.groupby(adata_sc.obs[annotation_col]).mean()  # T x G
 
     # Convert mean -> gene profile p_tg (rows sum to 1)
     p = mean_expr.values
@@ -99,21 +114,21 @@ def tacco_align_data(
     recon = C_st @ p_tg  # S x G
     assert recon.shape == (adata_st.n_obs, adata_sc.n_vars), "dims passen nicht"
 
-    # Export result to CSV
-    # - Rows: Genes
-    # - Columns: Spots
-    # - Top left cell = "GEP"
-    recon_df = pd.DataFrame(
-        recon.T.astype(np.float32), index=adata_sc.var_names, columns=adata_st.obs_names
+    # Build result AnnData (layout: obs = genes G, var = spots S)
+    adata_recon = AnnData(
+        X=recon.T.astype(np.float32),
+        obs=pd.DataFrame(index=adata_sc.var_names),
+        var=pd.DataFrame(index=adata_st.obs_names),
     )
-    logging.info("Shape recon_df: %s", recon_df.shape)
-    df_formatted = recon_df.map(fmt_nonzero_4)
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    df_formatted.to_csv(output_path, index=True, index_label="GEP")
+    adata_recon.obs_names = list(adata_sc.var_names)
+    adata_recon.var_names = list(adata_st.obs_names)
+
+    # Write h5ad
+    output_path = Path(output_path).with_suffix(".h5ad")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    adata_recon.write_h5ad(output_path)
     logging.info("Saved tacco GEP to %s", output_path)
 
-    # Return reconstruction as AnnData (genes x spots) for potential further use
-    adata_recon = AnnData(X=recon_df.values, obs=adata_sc.var, var=adata_st.obs)
     return adata_recon
 
 
@@ -149,17 +164,24 @@ if __name__ == "__main__":
         help="Whether to apply argmax to mapping",
     )
     parser.add_argument(
+        "--map-cell-types",
+        action="store_true",
+        default=False,
+        help="If set, aggregate cells by cell_type_key before mapping. Otherwise map individual cells.",
+    )
+    parser.add_argument(
         "--cell_type_key",
         type=str,
         required=False,
-        default="cellID",
-        help="What cell type key to load from sc data as cell type annotation to be mapped. If not provided, no cell type annotation is loaded and mapping is done cell-based.",
+        default="cellType",
+        help="obs column to use as cell type annotation (only used when --map-cell-types is set).",
     )
     args = parser.parse_args()
 
     tacco_align_data(
         args.dataset,
         deterministic_mapping=args.deterministic,
+        map_cell_types=args.map_cell_types,
         cell_type_key=args.cell_type_key,
         output_path=args.output_path,
     )

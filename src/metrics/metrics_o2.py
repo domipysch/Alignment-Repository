@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import json
 from anndata import AnnData
 from .utils.dataset_query import get_z_real_and_predicted_data_only_shared_genes
+from ..utils.io import load_st_adata
 from .utils.distance_metrics import cosine_similarity
 
 logger = logging.getLogger(__name__)
@@ -748,15 +749,12 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_output_folder: Path)
     ), "DataFrames haben unterschiedliche Formen."
 
     # Add spatial locations to AnnData objects
-    coords_path = dataset_folder / "stData_Spots.csv"
-    df_coords = pd.read_csv(coords_path, header=0, index_col=0)
-    df_coords.index = df_coords.index.astype(str)
-    adata_z.obsm["coords"] = df_coords.loc[
-        adata_z.obs_names, ["cArray0", "cArray1"]
-    ].to_numpy()
-    adata_predicted_z.obsm["coords"] = df_coords.loc[
-        adata_z.obs_names, ["cArray0", "cArray1"]
-    ].to_numpy()
+    adata_st_full = load_st_adata(dataset_folder)
+    spatial = adata_st_full.obsm["spatial"]
+    spot_index = {name: i for i, name in enumerate(adata_st_full.obs_names)}
+    coords = np.array([spatial[spot_index[s]] for s in adata_z.obs_names])
+    adata_z.obsm["coords"] = coords
+    adata_predicted_z.obsm["coords"] = coords
 
     # Compute and store cossim per gene in adata_predicted_z.var
     compute_metrics_per_gene(

@@ -4,7 +4,6 @@ from pathlib import Path
 from .run_dot import dot_align_data
 from ..metrics import run_all_shared_boxplots, run_all_permutation_boxplots
 from ..metrics import run_all_metrics
-from ..utils.io import csv_to_anndata
 
 if __name__ == "__main__":
     """
@@ -47,99 +46,103 @@ if __name__ == "__main__":
         logging.info(f"Created metrics folder: {metrics_folder}")
 
     logging.info("Run 1/6: Prob, individual cells")
-    output_path = Path(args.output_folder) / "prob_cells_GEP.csv"
-    dot_align_data(
+    output_path = Path(args.output_folder) / "prob_cells_GEP.h5ad"
+    predicted_gep = dot_align_data(
         args.dataset,
         "HSO",
         "probabilistic-mapping",
-        cell_type_key="cellID",
+        map_cell_types=False,
         output_path=output_path,
     )
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "prob_cells",
-        result_gep=csv_to_anndata(Path(output_path), transpose=False),
-        run_permutation_tests=True,
+        result_gep=predicted_gep,
+        run_permutation_tests=False,
     )
 
     logging.info("Run 2/6: Prob, Cell type major")
-    output_path = Path(args.output_folder) / "prob_celltype_major_GEP.csv"
-    dot_align_data(
+    output_path = Path(args.output_folder) / "prob_celltype_major_GEP.h5ad"
+    predicted_gep = dot_align_data(
         args.dataset,
         "HSO",
         "probabilistic-mapping",
+        map_cell_types=True,
         cell_type_key="cellType",
         output_path=output_path,
     )
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "prob_celltype_major",
-        result_gep=csv_to_anndata(Path(output_path), transpose=False),
-        run_permutation_tests=True,
+        result_gep=predicted_gep,
+        run_permutation_tests=False,
     )
 
     logging.info("Run 3/6: Prob, Cell type minor")
-    output_path = Path(args.output_folder) / "prob_celltype_minor_GEP.csv"
-    dot_align_data(
+    output_path = Path(args.output_folder) / "prob_celltype_minor_GEP.h5ad"
+    predicted_gep = dot_align_data(
         args.dataset,
         "HSO",
         "probabilistic-mapping",
+        map_cell_types=True,
         cell_type_key="cellTypeMinor",
         output_path=output_path,
     )
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "prob_celltype_minor",
-        result_gep=csv_to_anndata(Path(output_path), transpose=False),
-        run_permutation_tests=True,
+        result_gep=predicted_gep,
+        run_permutation_tests=False,
     )
 
     logging.info("Run 4/6: Det, individual cells")
-    output_path = Path(args.output_folder) / "det_cells_GEP.csv"
-    dot_align_data(
+    output_path = Path(args.output_folder) / "det_cells_GEP.h5ad"
+    predicted_gep = dot_align_data(
         args.dataset,
         "HSO",
         "deterministic-mapping",
-        cell_type_key="cellID",
+        map_cell_types=False,
         output_path=output_path,
     )
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "det_cells",
-        result_gep=csv_to_anndata(Path(output_path), transpose=False),
-        run_permutation_tests=True,
+        result_gep=predicted_gep,
+        run_permutation_tests=False,
     )
 
     logging.info("Run 5/6: Det, Cell type major")
-    output_path = Path(args.output_folder) / "det_celltype_major_GEP.csv"
-    dot_align_data(
+    output_path = Path(args.output_folder) / "det_celltype_major_GEP.h5ad"
+    predicted_gep = dot_align_data(
         args.dataset,
         "HSO",
         "deterministic-mapping",
+        map_cell_types=True,
         cell_type_key="cellType",
         output_path=output_path,
     )
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "det_celltype_major",
-        result_gep=csv_to_anndata(Path(output_path), transpose=False),
-        run_permutation_tests=True,
+        result_gep=predicted_gep,
+        run_permutation_tests=False,
     )
 
     logging.info("Run 6/6: Det, Cell type minor")
-    output_path = Path(args.output_folder) / "det_celltype_minor_GEP.csv"
-    dot_align_data(
+    output_path = Path(args.output_folder) / "det_celltype_minor_GEP.h5ad"
+    predicted_gep = dot_align_data(
         args.dataset,
         "HSO",
         "deterministic-mapping",
+        map_cell_types=True,
         cell_type_key="cellTypeMinor",
         output_path=output_path,
     )
     run_all_metrics.main(
         dataset_folder,
         metrics_folder / "det_celltype_minor",
-        result_gep=csv_to_anndata(Path(output_path), transpose=False),
-        run_permutation_tests=True,
+        result_gep=predicted_gep,
+        run_permutation_tests=False,
     )
 
     # Create shared boxplots

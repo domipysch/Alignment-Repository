@@ -10,27 +10,30 @@ from anndata import AnnData
 from scipy import sparse
 from .utils.utils import compute_basic_metrics_for_gene_groups
 from .utils.dataset_query import get_shared_genes
+from ..utils.io import load_sc_adata
 
 logger = logging.getLogger(__name__)
 
 
 def compute_metrics_scRNA(dataset_folder: Path) -> Dict[str, float]:
     """
-    Load input scRNA GEP file as pandas DataFrame & compute basic metrics.
+    Load input scRNA data from sc.h5ad & compute basic metrics.
     """
-
-    gep_path = dataset_folder / "scData_GEP.csv"
-    if not gep_path.exists():
-        raise FileNotFoundError(f"Ergebnisdatei nicht gefunden: {gep_path}")
-
-    # Read dataframe
-    df_gep = pd.read_csv(gep_path, header=0, index_col=0)
-    sc_genes = set(df_gep.index)
+    adata_sc = load_sc_adata(dataset_folder)
+    sc_genes = set(adata_sc.var_names)
 
     # Split result genes in marker and non-marker genes
     marker_genes = set(get_shared_genes(dataset_folder))
     marker_genes_sc = list(sc_genes.intersection(marker_genes))
     non_marker_genes_sc = list(sc_genes.difference(marker_genes))
+
+    X = adata_sc.X
+    if sparse.issparse(X):
+        X = X.toarray()
+    else:
+        X = np.asarray(X)
+    # compute_basic_metrics_for_gene_groups expects G x C (genes as rows)
+    df_gep = pd.DataFrame(X.T, index=adata_sc.var_names, columns=adata_sc.obs_names)
 
     return compute_basic_metrics_for_gene_groups(
         df_gep,

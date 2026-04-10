@@ -3,27 +3,18 @@ from typing import Optional, Callable
 from scipy.sparse import issparse
 import pandas as pd
 import numpy as np
+import anndata as ad
 from anndata import AnnData
 
 
-def csv_to_anndata(csv_path: Path, transpose: bool) -> AnnData:
-    """
-    Load a CSV file and return it as an AnnData object.
+def load_sc_adata(dataset_folder: Path) -> AnnData:
+    """Load single-cell AnnData from sc.h5ad in the given dataset folder."""
+    return ad.read_h5ad(dataset_folder / "sc.h5ad")
 
-    Args:
-        csv_path: Path to the input CSV file.
-        transpose: Whether to transpose the data after loading
-    """
-    df = pd.read_csv(csv_path, header=0, index_col=0)
-    if transpose:
-        df = df.T
-    X = np.asarray(df.values)
-    ad = AnnData(
-        X=X, obs=pd.DataFrame(index=df.index), var=pd.DataFrame(index=df.columns)
-    )
-    ad.obs_names = list(df.index)
-    ad.var_names = list(df.columns)
-    return ad
+
+def load_st_adata(dataset_folder: Path) -> AnnData:
+    """Load spatial transcriptomics AnnData from st.h5ad in the given dataset folder."""
+    return ad.read_h5ad(dataset_folder / "st.h5ad")
 
 
 def anndata_to_csv(

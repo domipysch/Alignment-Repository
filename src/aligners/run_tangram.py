@@ -8,7 +8,7 @@ import logging
 from anndata import AnnData
 import argparse
 from scipy.sparse import issparse
-from .utils import load_sc_adata, load_st_adata, fmt_nonzero_4
+from ..utils.io import load_sc_adata, load_st_adata
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +42,8 @@ def tangram_align_data(
 
     # Load input scRNA and ST data
     logger.info("Load data")
-    adata_sc = load_sc_adata(dataset_folder, cell_type_key=cell_type_key)  # C x G
-    adata_st = load_st_adata(dataset_folder)  # S x G
+    adata_sc = load_sc_adata(Path(dataset_folder))  # C x G
+    adata_st = load_st_adata(Path(dataset_folder))  # S x G
     logger.info("Data loaded")
     logger.info(f"Single Cell Data: {adata_sc.n_obs} cells x {adata_sc.n_vars} genes")
     logger.info(f"Spatial Data: {adata_st.n_obs} spots x {adata_st.n_vars} genes")
@@ -59,13 +59,13 @@ def tangram_align_data(
 
         # Filter out cell types with only one cell for marker gene computation
         singletons = (
-            adata_sc_copy.obs["cell_subclass"]
+            adata_sc_copy.obs[cell_type_key]
             .value_counts()
             .loc[lambda x: x == 1]
             .index.tolist()
         )
         adata_sc_copy = adata_sc_copy[
-            ~adata_sc_copy.obs["cell_subclass"].isin(singletons)
+            ~adata_sc_copy.obs[cell_type_key].isin(singletons)
         ].copy()
 
         # Proposed in Tangram tutorials: normalize & log transform first
@@ -73,7 +73,7 @@ def tangram_align_data(
         adata_sc_copy.X = np.log1p(adata_sc_copy.X)
 
         # Create list of names of marker genes
-        sc.tl.rank_genes_groups(adata_sc_copy, groupby="cell_subclass", use_raw=False)
+        sc.tl.rank_genes_groups(adata_sc_copy, groupby=cell_type_key, use_raw=False)
         markers_df = pd.DataFrame(adata_sc_copy.uns["rank_genes_groups"]["names"]).iloc[
             0:100, :
         ]
@@ -104,12 +104,12 @@ def tangram_align_data(
             adata_sc_map,
             adata_st,
             mode="clusters",
-            cluster_label="cell_subclass",  # .obs field w cell types
+            cluster_label=cell_type_key,
             density_prior="rna_count_based",
             num_epochs=500,
             device="cpu",
         )  # T x S
-        assert ad_map.n_obs == len(adata_sc_map.obs["cell_subclass"].unique())
+        assert ad_map.n_obs == len(adata_sc_map.obs[cell_type_key].unique())
         assert ad_map.n_vars == adata_st.n_obs
     else:
         ad_map = tg.map_cells_to_space(
@@ -144,16 +144,20 @@ def tangram_align_data(
         one_hot[argmax_idx, np.arange(mat.shape[1])] = 1.0
         ad_map.X = one_hot
 
-    # Optional: Store mapping matrix to CSV for inspection
-    df_map = pd.DataFrame(ad_map.X, index=ad_map.obs_names, columns=ad_map.var_names)
-    df_map.to_csv(str(output_path).replace("_GEP", "_mapping"))
+    # Store mapping matrix as h5ad
+    output_path = Path(output_path).with_suffix(".h5ad")
+    mapping_path_h5ad = output_path.with_name(
+        output_path.stem.replace("_GEP", "_mapping") + ".h5ad"
+    )
+    ad_map.write_h5ad(mapping_path_h5ad)
+    logger.info("Saved mapping to %s", mapping_path_h5ad)
 
     # Step 5: Compute Z' out of the mapping (expected gene expression per spot, scRNA data weighted by mapping)
     logger.info("Project gene expression to spatial spots")
     ad_ge = tg.project_genes(
         adata_map=ad_map,
         adata_sc=adata_sc,
-        cluster_label="cell_subclass" if map_clusters else None,
+        cluster_label=cell_type_key if map_clusters else None,
     )  # S x G
 
     # Transpose to G x S
@@ -173,14 +177,13 @@ def tangram_align_data(
     # Check: Rows = Genes, Columns = Spots
     assert expr.shape == (adata_sc.n_vars, adata_st.n_obs), "dims passen nicht"
 
-    # Make ad_ge obs_names uppercase (gene names in uppercase in input data, also in output)
+    # Make obs_names uppercase (gene names in uppercase in input data, also in output)
     ad_ge.obs_names = [s.upper() for s in ad_ge.obs_names]
 
-    # Step 6: Write CSV
-    logger.info(f"Write result GEP to CSV: {output_path}")
-    df = pd.DataFrame(expr, index=ad_ge.obs_names, columns=ad_ge.var_names)
-    df_formatted = df.map(fmt_nonzero_4)
-    df_formatted.to_csv(output_path, index=True, index_label="GEP")  # "GEP" in cell 0,0
+    # Step 6: Write h5ad (layout: obs = genes G, var = spots S)
+    logger.info(f"Write result GEP to h5ad.")
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    ad_ge.write_h5ad(output_path)
     logger.info(f"Saved tangram GEP to {output_path}")
 
     return ad_ge
@@ -226,7 +229,7 @@ if __name__ == "__main__":
         "--cell_type_key",
         type=str,
         required=False,
-        default=None,
+        default="cellType",
         help="What cell type key to load from sc data as cell type annotation to be mapped. If not provided, no cell type annotation is loaded and mapping is done cell-based.",
     )
     args = parser.parse_args()

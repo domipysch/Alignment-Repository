@@ -20,8 +20,8 @@ from .src.utils import (
     create_loss_plots,
     dump_loss_logs,
 )
-from .src.model import AlternativeIdeaModel
-from .src.loss import AlternativeIdeaLoss
+from .src.model import AlternativeIdeaModel, AlternativeIdeaModelNoLocality
+from .src.loss import AlternativeIdeaLoss, AlternativeIdeaLossNoLocality
 from .src.spatial_graph import build_spatial_graph, SpatialGraphType
 from .src.dataset import prepare_tensors_from_input
 from .src.utils import graph_type_from_config
@@ -202,31 +202,59 @@ def alternative_idea_compute_mapping(
     logger.debug(f"scRNA dimensions: num_cells={num_cells}, g_sc={g_sc}")
     logger.debug(f"Number of genes shared: {num_genes_shared}")
 
-    model = AlternativeIdeaModel(
-        num_spots_st=num_spots,
-        num_cells_sc=num_cells,
-        g_st=g_st,
-        g_sc=g_sc,
-        d=model_config["d"],
-        k=model_config["K"],
-        enc_hidden_dim=model_config["enc_hidden_dim"],
-        dec_hidden_dim=model_config["dec_hidden_dim"],
-        dropout_rate_decoder=training_config["dropout_decoder"],
-    ).to(device)
+    if loss_weights["lambda_rec_state"] == 0 and loss_weights["lambda_clust"] == 0:
+        logging.info("Using slim model (no locality metrics included)")
+        use_slim_model = True
+    else:
+        logging.info("Using full model (locality metrics included)")
+        use_slim_model = False
+
+    model: AlternativeIdeaModel | AlternativeIdeaModelNoLocality
+    if use_slim_model:
+        # No spatial neighborhood information taken into account
+        model = AlternativeIdeaModelNoLocality(
+            num_spots_st=num_spots,
+            num_cells_sc=num_cells,
+            k=model_config["K"],
+        ).to(device)
+    else:
+        # Use full model
+        model = AlternativeIdeaModel(
+            num_spots_st=num_spots,
+            num_cells_sc=num_cells,
+            g_st=g_st,
+            g_sc=g_sc,
+            d=model_config["d"],
+            k=model_config["K"],
+            enc_hidden_dim=model_config["enc_hidden_dim"],
+            dec_hidden_dim=model_config["dec_hidden_dim"],
+            dropout_rate_decoder=training_config["dropout_decoder"],
+        ).to(device)
 
     # 7. Initialize Loss and Optimizer
-    loss = AlternativeIdeaLoss(
-        lambda_rec_spot=loss_weights["lambda_rec_spot"],
-        lambda_rec_gene=loss_weights["lambda_rec_gene"],
-        lambda_rec_state=loss_weights["lambda_rec_state"],
-        lambda_clust=loss_weights["lambda_clust"],
-        lambda_state_entropy=loss_weights["lambda_state_entropy"],
-        lambda_spot_entropy=loss_weights["lambda_spot_entropy"],
-        normalize_by_initial=True,
-        warmup_iters=1,
-        k=model_config["K"],
-        use_cm=bool(training_config["use_cm"]),
-    )
+    loss: AlternativeIdeaLoss | AlternativeIdeaLossNoLocality
+    if use_slim_model:
+        loss = AlternativeIdeaLossNoLocality(
+            lambda_rec_spot=loss_weights["lambda_rec_spot"],
+            lambda_rec_gene=loss_weights["lambda_rec_gene"],
+            lambda_state_entropy=loss_weights["lambda_state_entropy"],
+            lambda_spot_entropy=loss_weights["lambda_spot_entropy"],
+            k=model_config["K"],
+            use_cm=bool(training_config["use_cm"]),
+        )
+    else:
+        loss = AlternativeIdeaLoss(
+            lambda_rec_spot=loss_weights["lambda_rec_spot"],
+            lambda_rec_gene=loss_weights["lambda_rec_gene"],
+            lambda_rec_state=loss_weights["lambda_rec_state"],
+            lambda_clust=loss_weights["lambda_clust"],
+            lambda_state_entropy=loss_weights["lambda_state_entropy"],
+            lambda_spot_entropy=loss_weights["lambda_spot_entropy"],
+            normalize_by_initial=True,
+            warmup_iters=1,
+            k=model_config["K"],
+            use_cm=bool(training_config["use_cm"]),
+        )
 
     optimizer = optim.Adam(model.parameters(), lr=training_config["lr"])
 
@@ -239,8 +267,17 @@ def alternative_idea_compute_mapping(
         "total-weighted": list(),
         "rec_spot": {"weight": loss_weights["lambda_rec_spot"], "values": list()},
         "rec_gene": {"weight": loss_weights["lambda_rec_gene"], "values": list()},
-        "rec_state": {"weight": loss_weights["lambda_rec_state"], "values": list()},
-        "clust": {"weight": loss_weights["lambda_clust"], "values": list()},
+        **(
+            {
+                "rec_state": {
+                    "weight": loss_weights["lambda_rec_state"],
+                    "values": list(),
+                },
+                "clust": {"weight": loss_weights["lambda_clust"], "values": list()},
+            }
+            if not use_slim_model
+            else {}
+        ),
         "state_entropy": {
             "weight": loss_weights["lambda_state_entropy"],
             "values": list(),
@@ -271,9 +308,19 @@ def alternative_idea_compute_mapping(
         A, B, h, M_rec, F = model(Z, edge_index)
 
         # Calculate segmented losses
-        loss_dict = loss(
-            A=A, B=B, h=h, M_rec=M_rec, F=F, X=X, X_shared=X_shared, Z_shared=Z_shared
-        )
+        if use_slim_model:
+            loss_dict = loss(A=A, B=B, X_shared=X_shared, Z_shared=Z_shared)
+        else:
+            loss_dict = loss(
+                A=A,
+                B=B,
+                h=h,
+                M_rec=M_rec,
+                F=F,
+                X=X,
+                X_shared=X_shared,
+                Z_shared=Z_shared,
+            )
 
         total_loss = loss_dict["loss"]
 
@@ -307,8 +354,9 @@ def alternative_idea_compute_mapping(
         losses["total-weighted"].append(to_scalar(total_loss))
         losses["rec_spot"]["values"].append(to_scalar(loss_dict.get("rec_spot")))
         losses["rec_gene"]["values"].append(to_scalar(loss_dict.get("rec_gene")))
-        losses["rec_state"]["values"].append(to_scalar(loss_dict.get("rec_state")))
-        losses["clust"]["values"].append(to_scalar(loss_dict.get("clust")))
+        if not use_slim_model:
+            losses["rec_state"]["values"].append(to_scalar(loss_dict.get("rec_state")))
+            losses["clust"]["values"].append(to_scalar(loss_dict.get("clust")))
         losses["state_entropy"]["values"].append(
             to_scalar(loss_dict.get("state_entropy"))
         )
@@ -585,7 +633,7 @@ def main(
     mapping_output_path: Optional[Path] = None,
     store_intermediate: bool = False,
     verbose_logging: bool = False,
-) -> tuple[AnnData, Optional[AnnData], dict]:
+) -> tuple[AnnData, Optional[AnnData], AnnData, dict]:
 
     mapping_config, _, _, training_config, _ = load_config(config_path)
 
@@ -619,6 +667,13 @@ def main(
         adata_st.n_obs,
         adata_sc.n_obs,
     ), "dims passen nicht"
+
+    # Create adata containing clustering information (cell to cell type)
+    cell_to_cell_type_adata = AnnData(X=cell_to_cell_type.detach().cpu().numpy())
+    cell_to_cell_type_adata.obs_names = adata_sc.obs_names
+    cell_to_cell_type_adata.var_names = [
+        f"Type {n}" for n in range(cell_to_cell_type.shape[1])
+    ]
 
     # Step 3.1: Save end values of loss terms (value after last epoch) to a csv file
     losses_after_last_epoch = dump_loss_logs(losses, config_path)
@@ -694,7 +749,12 @@ def main(
             logger.debug("No output path provided, skipping h5ad export.")
 
     # Step 7: Return result
-    return adata_prediction_prob, adata_prediction_det, losses_after_last_epoch
+    return (
+        adata_prediction_prob,
+        adata_prediction_det,
+        cell_to_cell_type_adata,
+        losses_after_last_epoch,
+    )
 
 
 if __name__ == "__main__":

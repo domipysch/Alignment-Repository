@@ -50,43 +50,86 @@ def run_config(
     save_result_path: Optional[Path],
     save_mapping_path: Optional[Path],
     metrics_folder: Path,
-    metrics_folder_det: Path,
+    metrics_folder_det: Optional[Path],
     run_permutation_tests: bool = False,
 ) -> dict:
     # Determine verbose flag from current logger level
     verbose_flag = logger.getEffectiveLevel() == logging.DEBUG
 
-    # Run alignment (G x S)
-    predicted_gep, predicted_gep_det, cell_to_celltype, losses_after_last_epoch = (
-        alternative_idea_main.main(
-            dataset,
-            run_config_path,
-            output_path=save_result_path,
-            # mapping_output_path=save_mapping_path,
-            mapping_output_path=None,
-            verbose_logging=verbose_flag,
-            store_intermediate=True,
+    # Load base config once; we'll patch K for each iteration
+    with open(run_config_path, "r") as f:
+        base_cfg = yaml.safe_load(f) or {}
+
+    all_losses = {}
+
+    # Compute leiden clustering on scData on all genes
+    # todo. hier weitermachen.
+
+    # todo. what is a valid selection of Ks to try?
+    # for K in (3, 5, 8, 10, 15, 20):
+    for K in (3, 5, 10):
+
+        # Create k-specific subfolders
+        k_result_dir = (
+            (save_result_path.parent / f"k{K}")
+            if save_result_path is not None
+            else None
         )
-    )
+        k_metrics_dir = metrics_folder / f"k{K}"
+        k_metrics_dir_det = (
+            (metrics_folder_det / f"k{K}") if metrics_folder_det else None
+        )
 
-    # Run individual metrics (probabilistic)
-    run_all_metrics.main(
-        dataset,
-        metrics_folder,
-        result_gep=predicted_gep,
-        run_permutation_tests=run_permutation_tests,
-    )
+        if k_result_dir is not None:
+            k_result_dir.mkdir(parents=True, exist_ok=True)
+        k_metrics_dir.mkdir(parents=True, exist_ok=True)
+        if k_metrics_dir_det is not None:
+            k_metrics_dir_det.mkdir(parents=True, exist_ok=True)
 
-    # Run individual metrics (deterministic) if applicable
-    if predicted_gep_det is not None:
+        # Write a yaml copy with model.K set
+        cfg_k = copy.deepcopy(base_cfg)
+        cfg_k["model"]["K"] = K
+        config_dir = k_result_dir if k_result_dir is not None else k_metrics_dir
+        k_config_path = config_dir / "config.yml"
+        with open(k_config_path, "w") as f:
+            yaml.safe_dump(cfg_k, f, sort_keys=False)
+
+        # Run alignment
+        predicted_gep, predicted_gep_det, cell_to_celltype, losses_after_last_epoch = (
+            alternative_idea_main.main(
+                dataset,
+                k_config_path,
+                output_path=k_result_dir / "gep",
+                mapping_output_path=None,
+                verbose_logging=verbose_flag,
+                store_intermediate=True,
+            )
+        )
+
+        # Run individual metrics (probabilistic)
         run_all_metrics.main(
             dataset,
-            metrics_folder_det,
-            result_gep=predicted_gep_det,
+            k_metrics_dir,
+            result_gep=predicted_gep,
             run_permutation_tests=run_permutation_tests,
         )
 
-    return losses_after_last_epoch
+        # Run individual metrics (deterministic) if applicable
+        if predicted_gep_det is not None and k_metrics_dir_det is not None:
+            run_all_metrics.main(
+                dataset,
+                k_metrics_dir_det,
+                result_gep=predicted_gep_det,
+                run_permutation_tests=run_permutation_tests,
+            )
+
+        # Todo. hier weitermachen. compute score.
+
+        all_losses[K] = losses_after_last_epoch
+
+    # todo. select best K and result?
+
+    return all_losses
 
 
 def main(
@@ -150,6 +193,8 @@ def main(
         vals = [node]
         leaves.append((path, vals))
         return leaves
+
+    assert "K" not in base_cfg["model"].keys(), "K set!"
 
     leaves = collect_leaves(base_cfg)
 
@@ -248,13 +293,13 @@ def main(
                 logger.info(
                     f"Starting run {run_id}/{total_runs - 1} -> writing to {run_dir}"
                 )
-                losses_after_last_epoch = run_config(
+                run_config(
                     dataset,
                     run_config_path,
                     (run_dir / "gep.h5ad") if save_result else None,
                     (run_dir / "mapping.csv") if save_result else None,
                     metric_dir,
-                    metric_dir_det if metric_dir_det is not None else "",
+                    metric_dir_det,
                     run_permutation_tests=run_permutation_tests,
                 )
                 duration = time.time() - start
@@ -266,12 +311,12 @@ def main(
                         "ok",
                         f"{duration:.3f}",
                         "",
-                        losses_after_last_epoch["rec_spot"],
-                        losses_after_last_epoch["rec_gene"],
-                        losses_after_last_epoch["rec_state"],
-                        losses_after_last_epoch["clust"],
-                        losses_after_last_epoch["state_entropy"],
-                        losses_after_last_epoch["spot_entropy"],
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
+                        "",
                     ]
                 )
                 logger.info(f"Run {run_id} completed in {duration:.2f}s")
@@ -302,17 +347,17 @@ def main(
             run_id += 1
 
     # Create shared boxplots
-    metric_folder_shared = metric_folder / "shared"
-    metric_folder_shared.mkdir(parents=True, exist_ok=True)
-    run_names = list(map(str, range(run_id)))
-    if base_cfg["mapping"]["deterministic"]:
-        run_names += list(f"{runid}_det" for runid in range(run_id))
-    create_shared_boxplots(
-        run_names,
-        metric_folder,
-        metric_folder_shared,
-        run_permutation_tests=run_permutation_tests,
-    )
+    # metric_folder_shared = metric_folder / "shared"
+    # metric_folder_shared.mkdir(parents=True, exist_ok=True)
+    # run_names = list(map(str, range(run_id)))
+    # if base_cfg["mapping"]["deterministic"]:
+    #     run_names += list(f"{runid}_det" for runid in range(run_id))
+    # create_shared_boxplots(
+    #     run_names,
+    #     metric_folder,
+    #     metric_folder_shared,
+    #     run_permutation_tests=run_permutation_tests,
+    # )
 
 
 if __name__ == "__main__":

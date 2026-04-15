@@ -123,16 +123,20 @@ def create_loss_plots(losses, loss_dir):
         list(v * losses["rec_gene"]["weight"] for v in losses["rec_gene"]["values"]),
         label="rec_gene-weighted",
     )
-    plt.plot(
-        epochs,
-        list(v * losses["rec_state"]["weight"] for v in losses["rec_state"]["values"]),
-        label="rec_state-weighted",
-    )
-    plt.plot(
-        epochs,
-        list(v * losses["clust"]["weight"] for v in losses["clust"]["values"]),
-        label="clust-weighted",
-    )
+    if "rec_state" in losses:
+        plt.plot(
+            epochs,
+            list(
+                v * losses["rec_state"]["weight"] for v in losses["rec_state"]["values"]
+            ),
+            label="rec_state-weighted",
+        )
+    if "clust" in losses:
+        plt.plot(
+            epochs,
+            list(v * losses["clust"]["weight"] for v in losses["clust"]["values"]),
+            label="clust-weighted",
+        )
     plt.plot(
         epochs,
         list(
@@ -165,8 +169,8 @@ def create_loss_plots(losses, loss_dir):
     components = (
         "rec_spot",
         "rec_gene",
-        "rec_state",
-        "clust",
+        *(("rec_state",) if "rec_state" in losses else ()),
+        *(("clust",) if "clust" in losses else ()),
         "state_entropy",
         "spot_entropy",
     )

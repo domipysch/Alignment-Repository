@@ -353,3 +353,207 @@ class AlternativeIdeaLoss(nn.Module):
             "state_entropy": l_state_entropy,
             "spot_entropy": l_spot_entropy,
         }
+
+
+class AlternativeIdeaLossNoLocality(nn.Module):
+    def __init__(
+        self,
+        lambda_rec_spot: float = 1.0,
+        lambda_rec_gene: float = 0.0,
+        lambda_state_entropy: float = 1.0,
+        lambda_spot_entropy: float = 1.0,
+        eps: float = 1e-8,
+        k: int = 20,
+        use_cm: bool = False,
+    ):
+        super(AlternativeIdeaLossNoLocality, self).__init__()
+        self.lambda_rec_spot = lambda_rec_spot
+        self.lambda_rec_gene = lambda_rec_gene
+        self.lambda_state_entropy = lambda_state_entropy
+        self.lambda_spot_entropy = lambda_spot_entropy
+        self.eps = eps
+        self.lnK = torch.log(torch.tensor(k, dtype=torch.float32))
+        self.use_cm = use_cm
+        logger.debug("AlternativeIdeaLossNoLocality initialized")
+
+    def get_rec_spot_loss(
+        self, A: Tensor, B: Tensor, X_shared: Tensor, Z_shared: Tensor
+    ) -> Tensor:
+        """
+        Eq (9): Scale-invariant reconstruction loss (Z' vs Z on shared genes).
+
+        Args:
+            A: Alignment matrix (S x C)
+            X_shared: scRNA-seq reference restricted to shared genes (C x G_shared)
+            Z_shared: Empirical HSO data restricted to shared genes (S x G_shared)
+        """
+        # --- Safety Check ---
+        # Ensure that the number of genes (columns) matches
+        if X_shared.shape[1] != Z_shared.shape[1]:
+            raise ValueError(
+                f"Gene dimension mismatch! X has {X_shared.shape[1]} genes, "
+                f"but Z_marker has {Z_shared.shape[1]} genes."
+            )
+
+        # 1. Create Z_prime (The augmented spot data reconstructed from the scRNA-seq reference)
+        if self.use_cm:
+
+            C = torch.matmul(A, B)  # (S x K)
+
+            # Compute B_normalized: Normalize B^T by the number of cells assigned to each state to prevent scale issues
+            B_normalized_sum_over_types_1 = B / (
+                torch.sum(B, dim=0) + self.eps
+            )  # (K x C)
+
+            M = torch.matmul(
+                B_normalized_sum_over_types_1.t(), X_shared
+            )  # (K x G_shared)
+            # M = torch.matmul(B.t(), X_shared)  # (K x G_shared)
+            Z_prime = torch.matmul(C, M)  # (S x G_shared)
+
+        else:
+            # (S x C) @ (C x G_shared) -> (S x G_shared)
+            Z_prime = torch.matmul(A, X_shared)
+
+        # 2. Compute Cosine Similarity Components
+        # Dot product across the gene dimension for each spot
+        dot_product = torch.sum(Z_shared * Z_prime, dim=1)  # (S,)
+
+        # L2 Norms for each spot
+        norm_Z = torch.norm(Z_shared, p=2, dim=1)  # (S,)
+        norm_Z_prime = torch.norm(Z_prime, p=2, dim=1)  # (S,)
+
+        # 3. Calculate Scale-Invariant Loss
+        # We add eps to the denominator for numerical stability
+        cosine_sim = dot_product / (norm_Z * norm_Z_prime + self.eps)
+
+        # Clip to range [-1, 1] to avoid nan due to float precision before distance calc
+        cosine_sim = torch.clamp(cosine_sim, -1.0, 1.0)
+
+        # Distance = sqrt(1 - similarity)
+        # loss_per_spot = torch.sqrt(1.0 - cosine_sim)  # (S,)
+        # sic. mit sqrt gabs nan-probleme im traning mit den gradienten
+        loss_per_spot = torch.clamp(1.0 - cosine_sim, min=0.0)
+
+        return torch.mean(loss_per_spot)
+
+    def get_rec_gene_loss(
+        self, A: Tensor, B: Tensor, X_shared: Tensor, Z_shared: Tensor
+    ) -> Tensor:
+        """
+        Gene-wise scale-invariant reconstruction loss (Z' vs Z on shared genes).
+
+        Equivalent to get_rec_spot_loss but the cosine similarity is computed
+        per gene (over the spots dimension) instead of per spot (over the genes
+        dimension).
+
+        Args:
+            A: Alignment matrix (S x C)
+            B: Cell-to-state matrix (C x K)
+            X_shared: scRNA-seq reference restricted to shared genes (C x G_shared)
+            Z_shared: Empirical ST data restricted to shared genes (S x G_shared)
+        """
+        # 1. Compute Z_prime (same as in get_rec_spot_loss)
+        if self.use_cm:
+            C = torch.matmul(A, B)  # (S x K)
+            B_normalized = B / (
+                torch.sum(B, dim=0) + self.eps
+            )  # (C x K), col-normalised
+            M = torch.matmul(B_normalized.t(), X_shared)  # (K x G_shared)
+            Z_prime = torch.matmul(C, M)  # (S x G_shared)
+        else:
+            Z_prime = torch.matmul(A, X_shared)  # (S x G_shared)
+
+        # 2. Cosine similarity gene-wise: sum over spots (dim=0)
+        dot_product = torch.sum(Z_shared * Z_prime, dim=0)  # (G_shared,)
+        norm_Z = torch.norm(Z_shared, p=2, dim=0)  # (G_shared,)
+        norm_Z_prime = torch.norm(Z_prime, p=2, dim=0)  # (G_shared,)
+
+        cosine_sim = dot_product / (norm_Z * norm_Z_prime + self.eps)
+        cosine_sim = torch.clamp(cosine_sim, -1.0, 1.0)
+
+        loss_per_gene = torch.clamp(1.0 - cosine_sim, min=0.0)
+        return torch.mean(loss_per_gene)
+
+    def get_state_entropy_loss(self, B: Tensor) -> Tensor:
+        """
+        Eq (12): Cell state entropy loss.
+
+        Prioritizes the distribution of global cell-to-state assignments.
+
+        Args:
+            B: Cell-State assignment matrix (C x K).
+        """
+        # 1. Calculate p: The fraction of cells mapped to each state k
+        # p is the mean of B across the cell dimension (dim=0)
+        # Shape: (K,)
+        p = torch.mean(B, dim=0)
+
+        # 2. Compute Entropy: -sum(p * log(p + eps))
+        # eps is added for numerical stability to avoid log(0)
+        return -torch.sum(p * torch.log(p + self.eps))
+
+    def get_spot_entropy_loss(self, A: Tensor, B: Tensor) -> Tensor:
+        """
+        Eq (13): Spot state entropy loss.
+
+        Prioritizes confident spot-to-cell-state assignments by minimizing
+        the entropy of the derived spot-state matrix C.
+
+        Args:
+            A: Alignment matrix (S x C).
+            B: Cell-State assignment matrix (C x K).
+        """
+        # 1. Compute C (S x K): Spot-to-State assignment matrix
+        C = torch.matmul(A, B)
+
+        # 2. Compute Entropy per spot
+        # Formula: -sum_k(C_sk * log(C_sk + eps))
+        # We perform the sum across the state dimension (dim=1)
+        # Result shape: (S,)
+        spot_entropies = -torch.sum(C * torch.log(C + self.eps), dim=1)
+
+        # 3. Return the mean across all spots multiplied by lambda
+        return torch.mean(spot_entropies)
+
+    def forward(
+        self,
+        A: Tensor,
+        B: Tensor,
+        X_shared: Tensor,
+        Z_shared: Tensor,
+    ) -> dict[str, Tensor]:
+        """
+        Args:
+            A: Spot to Cell mapping (S x C)
+            B: Cell to cell state mapping (C x K)
+            X_shared: scRNA-seq ref on shared genes (C x g_shared)
+            Z_shared: Spatial data on shared genes (S x g_shared)
+        """
+        # 1. Individual terms (unweighted)
+        l_rec_spot = self.get_rec_spot_loss(A, B, X_shared, Z_shared)
+        l_rec_gene = self.get_rec_gene_loss(A, B, X_shared, Z_shared)
+        l_state_entropy = self.get_state_entropy_loss(B)
+        l_spot_entropy = self.get_spot_entropy_loss(A, B)
+
+        # 3. Normalize l_state_entropy and l_spot_entropy by their maximum possible values to keep them in a comparable range
+        # Max entropy for both is log(K)
+        l_state_entropy /= self.lnK
+        l_spot_entropy /= self.lnK
+
+        # 3. Weighted total (use normalized versions for rec_state and clust when available)
+        total_loss = (
+            self.lambda_rec_spot * l_rec_spot
+            + self.lambda_rec_gene * l_rec_gene
+            + self.lambda_state_entropy * l_state_entropy
+            + self.lambda_spot_entropy * l_spot_entropy
+        )
+
+        # Return both the weighted normalized components (for training/plotting) and the raw-weighted ones (for debug)
+        return {
+            "loss": total_loss,
+            "rec_spot": l_rec_spot,
+            "rec_gene": l_rec_gene,
+            "state_entropy": l_state_entropy,
+            "spot_entropy": l_spot_entropy,
+        }

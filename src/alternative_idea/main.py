@@ -627,7 +627,8 @@ def compute_gene_expression_prediction(
 
 
 def main(
-    dataset_folder: Path,
+    sc_path: Path,
+    st_path: Path,
     config_path: Path,
     output_path: Optional[Path],
     mapping_output_path: Optional[Path] = None,
@@ -648,8 +649,8 @@ def main(
 
     # Step 1: Load data
     logger.info("Load input scRNA and ST data...")
-    adata_sc = load_sc_adata(dataset_folder)  # C x G
-    adata_st = load_st_adata(dataset_folder)  # S x G
+    adata_sc = load_sc_adata(sc_path)  # C x G
+    adata_st = load_st_adata(st_path)  # S x G
     logger.info("Loaded input scRNA and ST data.")
 
     # Step 2: Map data using AlternativeIdea
@@ -764,7 +765,10 @@ if __name__ == "__main__":
         description="Run AlternativeIdea alignment on a dataset folder"
     )
     parser.add_argument(
-        "-d", "--dataset", dest="dataset", type=Path, help="Path to dataset folder"
+        "--scdata", dest="scdata", type=Path, required=True, help="Full path to sc.h5ad"
+    )
+    parser.add_argument(
+        "--stdata", dest="stdata", type=Path, required=True, help="Full path to st.h5ad"
     )
     parser.add_argument(
         "-c", "--config", dest="config", type=Path, help="Path to config.yaml"
@@ -806,7 +810,8 @@ if __name__ == "__main__":
 
     # Run alignment
     main(
-        args.dataset,
+        args.scdata,
+        args.stdata,
         args.config,
         args.output_path,
         args.mapping_output_path,

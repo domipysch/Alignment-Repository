@@ -11,18 +11,20 @@ from ..utils.io import load_sc_adata, load_st_adata
 
 
 def tacco_align_data(
-    dataset_folder: str,
+    sc_path: Path,
+    st_path: Path,
     deterministic_mapping: bool,
     map_cell_types: bool,
     cell_type_key: str = "cellType",
     output_path: Path = None,
 ) -> AnnData:
     """
-    Run TACCO alignment on a prepared dataset in the given folder.
+    Run TACCO alignment on a prepared dataset.
     Saves predicted gene expression per spot (GEP) as h5ad to output_path.
 
     Args:
-        dataset_folder: Path to dataset folder.
+        sc_path: Full path to sc.h5ad.
+        st_path: Full path to st.h5ad.
         deterministic_mapping: Convert the probabilistic mapping to one-hot (one cell/type per spot).
         map_cell_types: If True, aggregate cells by cell_type_key before mapping.
                         If False, map individual cells directly.
@@ -32,11 +34,12 @@ def tacco_align_data(
     Returns:
         AnnData with obs=genes, var=spots (G x S layout).
     """
-    assert os.path.isdir(dataset_folder), f"Dataset folder not found: {dataset_folder}"
+    assert Path(sc_path).exists(), f"sc.h5ad not found: {sc_path}"
+    assert Path(st_path).exists(), f"st.h5ad not found: {st_path}"
 
     logging.info("Load data")
-    adata_sc = load_sc_adata(Path(dataset_folder))  # C x G
-    adata_st = load_st_adata(Path(dataset_folder))  # S x G
+    adata_sc = load_sc_adata(Path(sc_path))  # C x G
+    adata_st = load_st_adata(Path(st_path))  # S x G
 
     # Determine which obs column to use as the annotation key for TACCO
     if map_cell_types:
@@ -148,11 +151,10 @@ if __name__ == "__main__":
         description="Run TACCO alignment on a dataset folder"
     )
     parser.add_argument(
-        "-d",
-        "--dataset",
-        dest="dataset",
-        type=str,
-        help="Path to dataset folder (default: development workspace mouse cortex)",
+        "--scdata", type=Path, required=True, help="Full path to sc.h5ad"
+    )
+    parser.add_argument(
+        "--stdata", type=Path, required=True, help="Full path to st.h5ad"
     )
     parser.add_argument(
         "-o", "--output_path", type=str, help="Path where to store result"
@@ -179,7 +181,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     tacco_align_data(
-        args.dataset,
+        args.scdata,
+        args.stdata,
         deterministic_mapping=args.deterministic,
         map_cell_types=args.map_cell_types,
         cell_type_key=args.cell_type_key,

@@ -700,7 +700,9 @@ def plot_delta_map(
     plt.close(fig)
 
 
-def main(dataset_folder: Path, result_gep: AnnData, metrics_output_folder: Path):
+def main(
+    sc_path: Path, st_path: Path, result_gep: AnnData, metrics_output_folder: Path
+):
     """
     Compute metrics for objective 3 and save results as JSON files / diagrams.
 
@@ -709,7 +711,8 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_output_folder: Path)
     - Generate spatial distribution plots for some genes (high/medium/low cosine similarity).
 
     Args:
-        dataset_folder: Path to dataset folder
+        sc_path: Full path to sc.h5ad.
+        st_path: Full path to st.h5ad.
         result_gep: G x S predicted gene expression AnnData
         metrics_output_folder:
 
@@ -740,7 +743,7 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_output_folder: Path)
 
     # Load data (input ST and predicted)
     adata_z, adata_predicted_z = get_z_real_and_predicted_data_only_shared_genes(
-        dataset_folder, result_gep
+        sc_path, st_path, result_gep
     )
 
     # Assert that both DataFrames have the same shape of genes and spots
@@ -749,7 +752,7 @@ def main(dataset_folder: Path, result_gep: AnnData, metrics_output_folder: Path)
     ), "DataFrames haben unterschiedliche Formen."
 
     # Add spatial locations to AnnData objects
-    adata_st_full = load_st_adata(dataset_folder)
+    adata_st_full = load_st_adata(st_path)
     spatial = adata_st_full.obsm["spatial"]
     spot_index = {name: i for i, name in enumerate(adata_st_full.obs_names)}
     coords = np.array([spatial[spot_index[s]] for s in adata_z.obs_names])

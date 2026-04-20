@@ -45,7 +45,9 @@ def create_shared_boxplots(
 
 
 def run_config(
-    dataset: Path,
+    sc_path: Path,
+    st_path: Path,
+    metrics_dataset: Path,
     run_config_path: Path,
     save_result_path: Optional[Path],
     save_mapping_path: Optional[Path],
@@ -59,7 +61,8 @@ def run_config(
     # Run alignment (G x S)
     predicted_gep, predicted_gep_det, cell_to_celltype, losses_after_last_epoch = (
         alternative_idea_main.main(
-            dataset,
+            sc_path,
+            st_path,
             run_config_path,
             output_path=save_result_path,
             # mapping_output_path=save_mapping_path,
@@ -71,7 +74,8 @@ def run_config(
 
     # Run individual metrics (probabilistic)
     run_all_metrics.main(
-        dataset,
+        sc_path,
+        metrics_dataset / "st.h5ad",
         metrics_folder,
         result_gep=predicted_gep,
         run_permutation_tests=run_permutation_tests,
@@ -80,7 +84,8 @@ def run_config(
     # Run individual metrics (deterministic) if applicable
     if predicted_gep_det is not None:
         run_all_metrics.main(
-            dataset,
+            sc_path,
+            metrics_dataset / "st.h5ad",
             metrics_folder_det,
             result_gep=predicted_gep_det,
             run_permutation_tests=run_permutation_tests,
@@ -90,7 +95,9 @@ def run_config(
 
 
 def main(
-    dataset: Path,
+    sc_path: Path,
+    st_path: Path,
+    metrics_dataset: Path,
     experiment_config: Path,
     result_folder: Path,
     metric_folder: Path,
@@ -100,8 +107,10 @@ def main(
 
     if not experiment_config.exists():
         raise FileNotFoundError(f"experiment_config not found: {experiment_config}")
-    if not dataset.exists():
-        raise FileNotFoundError(f"dataset folder not found: {dataset}")
+    if not sc_path.exists():
+        raise FileNotFoundError(f"sc.h5ad not found: {sc_path}")
+    if not st_path.exists():
+        raise FileNotFoundError(f"st.h5ad not found: {st_path}")
 
     # Load experiment config
     with open(experiment_config, "r") as f:
@@ -249,7 +258,9 @@ def main(
                     f"Starting run {run_id}/{total_runs - 1} -> writing to {run_dir}"
                 )
                 losses_after_last_epoch = run_config(
-                    dataset,
+                    sc_path,
+                    st_path,
+                    metrics_dataset,
                     run_config_path,
                     (run_dir / "gep.h5ad") if save_result else None,
                     (run_dir / "mapping.csv") if save_result else None,
@@ -321,7 +332,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Run AlternativeIdea alignment on a dataset folder"
     )
-    parser.add_argument("-d", "--dataset", type=Path, help="Path to dataset folder")
+    parser.add_argument(
+        "--scdata", type=Path, required=True, help="Full path to sc.h5ad"
+    )
+    parser.add_argument(
+        "--stdata", type=Path, required=True, help="Full path to st.h5ad"
+    )
+    parser.add_argument(
+        "--dataset",
+        type=Path,
+        required=False,
+        default=None,
+        help="Dataset folder for metrics reference (default: parent of --stdata)",
+    )
     parser.add_argument(
         "-c", "--experiment_config", type=Path, help="Path to config.yaml"
     )
@@ -362,8 +385,11 @@ if __name__ == "__main__":
     logger.setLevel(level)
 
     # 3. Run
+    metrics_dataset = args.dataset if args.dataset else args.stdata.parent
     main(
-        args.dataset,
+        args.scdata,
+        args.stdata,
+        metrics_dataset,
         args.experiment_config,
         args.result_folder,
         args.metric_folder,

@@ -27,7 +27,8 @@ def _find_rscript():
 
 
 def dot_align_data(
-    dataset_folder: str,
+    sc_path: Path,
+    st_path: Path,
     mode: str,
     mapping_mode: str,
     map_cell_types: bool,
@@ -39,7 +40,8 @@ def dot_align_data(
     Saves the resulting GEP as h5ad to output_path and returns it.
 
     Args:
-        dataset_folder: Path to dataset folder containing sc.h5ad and st.h5ad.
+        sc_path: Full path to sc.h5ad.
+        st_path: Full path to st.h5ad.
         mode: "LSO" or "HSO"
         mapping_mode: "deterministic-mapping" or "probabilistic-mapping"
         map_cell_types: If True, aggregate cells by cell_type_key before mapping.
@@ -61,7 +63,8 @@ def dot_align_data(
     cmd = [
         _find_rscript(),
         R_SCRIPT,
-        str(dataset_folder),
+        str(sc_path),
+        str(st_path),
         mode,
         mapping_mode,
         annotation_key,
@@ -90,7 +93,12 @@ if __name__ == "__main__":
     )
 
     parser = argparse.ArgumentParser(description="Run DOT alignment via run_dot.R")
-    parser.add_argument("-d", "--dataset", required=True, help="Path to dataset folder")
+    parser.add_argument(
+        "--scdata", type=Path, required=True, help="Full path to sc.h5ad"
+    )
+    parser.add_argument(
+        "--stdata", type=Path, required=True, help="Full path to st.h5ad"
+    )
     parser.add_argument(
         "-m", "--mode", default="HSO", choices=["LSO", "HSO"], help="Resolution mode"
     )
@@ -118,7 +126,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     dot_align_data(
-        args.dataset,
+        args.scdata,
+        args.stdata,
         args.mode,
         args.mapping,
         map_cell_types=args.map_cell_types,

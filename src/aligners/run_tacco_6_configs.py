@@ -19,7 +19,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Run TACCO alignment on a dataset folder"
     )
-    parser.add_argument("-d", "--dataset", type=str, help="Path to dataset folder")
+    parser.add_argument(
+        "--scdata", type=str, required=True, help="Full path to sc.h5ad"
+    )
+    parser.add_argument(
+        "--stdata", type=str, required=True, help="Full path to st.h5ad"
+    )
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        required=False,
+        default=None,
+        help="Dataset folder for metrics reference (default: parent of --stdata)",
+    )
     parser.add_argument(
         "-o", "--output_folder", type=str, help="Path where to store result"
     )
@@ -28,7 +40,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    dataset_folder = Path(args.dataset)
+    dataset_folder = Path(args.dataset) if args.dataset else Path(args.stdata).parent
     if not dataset_folder.exists():
         logging.error(f"Dataset folder does not exist: {dataset_folder}")
         exit(1)
@@ -48,14 +60,16 @@ if __name__ == "__main__":
     logging.info("Run 1/6: Prob, individual cells")
     output_path = Path(args.output_folder) / "prob_cells_GEP.h5ad"
     predicted_gep = tacco_align_data(
-        args.dataset,
+        args.scdata,
+        args.stdata,
         deterministic_mapping=False,
         map_cell_types=False,
         output_path=output_path,
     )
     # predicted_gep = ad.read_h5ad(output_path)  # If already computed
     run_all_metrics.main(
-        dataset_folder,
+        args.scdata,
+        args.stdata,
         metrics_folder / "prob_cells",
         result_gep=predicted_gep,
         run_permutation_tests=False,
@@ -64,7 +78,8 @@ if __name__ == "__main__":
     logging.info("Run 2/6: Prob, Cell type major")
     output_path = Path(args.output_folder) / "prob_celltype_major_GEP.h5ad"
     predicted_gep = tacco_align_data(
-        args.dataset,
+        args.scdata,
+        args.stdata,
         deterministic_mapping=False,
         map_cell_types=True,
         cell_type_key="cellType",
@@ -72,40 +87,44 @@ if __name__ == "__main__":
     )
     # predicted_gep = ad.read_h5ad(output_path)  # If already computed
     run_all_metrics.main(
-        dataset_folder,
+        args.scdata,
+        args.stdata,
         metrics_folder / "prob_celltype_major",
         result_gep=predicted_gep,
         run_permutation_tests=False,
     )
 
-    logging.info("Run 3/6: Prob, Cell type minor")
-    output_path = Path(args.output_folder) / "prob_celltype_minor_GEP.h5ad"
-    predicted_gep = tacco_align_data(
-        args.dataset,
-        deterministic_mapping=False,
-        map_cell_types=True,
-        cell_type_key="cellTypeMinor",
-        output_path=output_path,
-    )
-    # predicted_gep = ad.read_h5ad(output_path)  # If already computed
-    run_all_metrics.main(
-        dataset_folder,
-        metrics_folder / "prob_celltype_minor",
-        result_gep=predicted_gep,
-        run_permutation_tests=False,
-    )
+    # logging.info("Run 3/6: Prob, Cell type minor")
+    # output_path = Path(args.output_folder) / "prob_celltype_minor_GEP.h5ad"
+    # predicted_gep = tacco_align_data(
+    #     args.scdata,
+    #     args.stdata,
+    #     deterministic_mapping=False,
+    #     map_cell_types=True,
+    #     cell_type_key="cellTypeMinor",
+    #     output_path=output_path,
+    # )
+    # # predicted_gep = ad.read_h5ad(output_path)  # If already computed
+    # run_all_metrics.main(
+    #     dataset_folder,
+    #     metrics_folder / "prob_celltype_minor",
+    #     result_gep=predicted_gep,
+    #     run_permutation_tests=False,
+    # )
 
     logging.info("Run 4/6: Det, individual cells")
     output_path = Path(args.output_folder) / "det_cells_GEP.h5ad"
     predicted_gep = tacco_align_data(
-        args.dataset,
+        args.scdata,
+        args.stdata,
         deterministic_mapping=True,
         map_cell_types=False,
         output_path=output_path,
     )
     # predicted_gep = ad.read_h5ad(output_path)  # If already computed
     run_all_metrics.main(
-        dataset_folder,
+        args.scdata,
+        args.stdata,
         metrics_folder / "det_cells",
         result_gep=predicted_gep,
         run_permutation_tests=False,
@@ -114,7 +133,8 @@ if __name__ == "__main__":
     logging.info("Run 5/6: Det, Cell type major")
     output_path = Path(args.output_folder) / "det_celltype_major_GEP.h5ad"
     predicted_gep = tacco_align_data(
-        args.dataset,
+        args.scdata,
+        args.stdata,
         deterministic_mapping=True,
         map_cell_types=True,
         cell_type_key="cellType",
@@ -122,28 +142,30 @@ if __name__ == "__main__":
     )
     # predicted_gep = ad.read_h5ad(output_path)  # If already computed
     run_all_metrics.main(
-        dataset_folder,
+        args.scdata,
+        args.stdata,
         metrics_folder / "det_celltype_major",
         result_gep=predicted_gep,
         run_permutation_tests=False,
     )
 
-    logging.info("Run 6/6: Det, Cell type minor")
-    output_path = Path(args.output_folder) / "det_celltype_minor_GEP.h5ad"
-    predicted_gep = tacco_align_data(
-        args.dataset,
-        deterministic_mapping=True,
-        map_cell_types=True,
-        cell_type_key="cellTypeMinor",
-        output_path=output_path,
-    )
-    # predicted_gep = ad.read_h5ad(output_path)  # If already computed
-    run_all_metrics.main(
-        dataset_folder,
-        metrics_folder / "det_celltype_minor",
-        result_gep=predicted_gep,
-        run_permutation_tests=False,
-    )
+    # logging.info("Run 6/6: Det, Cell type minor")
+    # output_path = Path(args.output_folder) / "det_celltype_minor_GEP.h5ad"
+    # predicted_gep = tacco_align_data(
+    #     args.scdata,
+    #     args.stdata,
+    #     deterministic_mapping=True,
+    #     map_cell_types=True,
+    #     cell_type_key="cellTypeMinor",
+    #     output_path=output_path,
+    # )
+    # # predicted_gep = ad.read_h5ad(output_path)  # If already computed
+    # run_all_metrics.main(
+    #     dataset_folder,
+    #     metrics_folder / "det_celltype_minor",
+    #     result_gep=predicted_gep,
+    #     run_permutation_tests=False,
+    # )
 
     # Create shared boxplots
     metric_folder_shared = metrics_folder / "shared"
@@ -151,16 +173,16 @@ if __name__ == "__main__":
     folders = [
         "prob_cells",
         "det_cells",
-        "prob_celltype_minor",
-        "det_celltype_minor",
+        # "prob_celltype_minor",
+        # "det_celltype_minor",
         "prob_celltype_major",
         "det_celltype_major",
     ]
     labels = [
         "Cell - prob.",
         "Cell - det.",
-        "Minor cell state - prob.",
-        "Minor cell state - det.",
+        # "Minor cell state - prob.",
+        # "Minor cell state - det.",
         "Major cell state - prob.",
         "Major cell state - det.",
     ]

@@ -7,14 +7,14 @@ import anndata as ad
 from anndata import AnnData
 
 
-def load_sc_adata(dataset_folder: Path) -> AnnData:
-    """Load single-cell AnnData from sc.h5ad in the given dataset folder."""
-    return ad.read_h5ad(dataset_folder / "sc.h5ad")
+def load_sc_adata(path: Path) -> AnnData:
+    """Load single-cell AnnData from the given sc.h5ad file path."""
+    return ad.read_h5ad(path)
 
 
-def load_st_adata(dataset_folder: Path) -> AnnData:
-    """Load spatial transcriptomics AnnData from st.h5ad in the given dataset folder."""
-    return ad.read_h5ad(dataset_folder / "st.h5ad")
+def load_st_adata(path: Path) -> AnnData:
+    """Load spatial transcriptomics AnnData from the given st.h5ad file path."""
+    return ad.read_h5ad(path)
 
 
 def anndata_to_csv(

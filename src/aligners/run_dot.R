@@ -5,7 +5,7 @@
 # Python converts the CSV to h5ad after this script exits.
 #
 # Usage:
-# Rscript run_dot.R <dataset_folder> <LSO|HSO> <deterministic-mapping|probabilistic-mapping> <cellTypeKey|cellID> <output_path.csv>
+# Rscript run_dot.R <sc_path> <st_path> <LSO|HSO> <deterministic-mapping|probabilistic-mapping> <cellTypeKey|cellID> <output_path.csv>
 #
 # cellTypeKey:
 #   "cellID"        -> map individual cells (each cell is its own type)
@@ -18,14 +18,15 @@ library(stats)
 library(utils)
 
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) < 5) {
-  stop("Need 5 args: dataset_folder, mode (LSO|HSO), mapping_mode, cellTypeKey, output_path.")
+if (length(args) < 6) {
+  stop("Need 6 args: sc_path, st_path, mode (LSO|HSO), mapping_mode, cellTypeKey, output_path.")
 }
-dataset_folder <- args[1]
-mode           <- toupper(args[2])
-mapping_mode   <- args[3]
-cellTypeKey    <- args[4]
-output_path    <- args[5]
+sc_path      <- args[1]
+st_path      <- args[2]
+mode         <- toupper(args[3])
+mapping_mode <- args[4]
+cellTypeKey  <- args[5]
+output_path  <- args[6]
 
 if (!mode %in% c("LSO", "HSO")) {
   stop(sprintf("Invalid mode '%s'. Use 'LSO' or 'HSO'.", mode))
@@ -82,7 +83,7 @@ read_obs_col <- function(h5file, col_name) {
 
 # ---- Load sc.h5ad ----
 cat("Loading sc.h5ad...\n")
-sc_h5    <- H5File$new(file.path(dataset_folder, "sc.h5ad"), mode = "r")
+sc_h5    <- H5File$new(sc_path, mode = "r")
 cell_ids <- read_h5ad_index(sc_h5[["obs"]])  # length C
 sc_gene_ids <- read_h5ad_index(sc_h5[["var"]])  # length G
 
@@ -116,7 +117,7 @@ colnames(ref_counts) <- cell_ids
 
 # ---- Load st.h5ad ----
 cat("Loading st.h5ad...\n")
-st_h5        <- H5File$new(file.path(dataset_folder, "st.h5ad"), mode = "r")
+st_h5        <- H5File$new(st_path, mode = "r")
 spot_ids     <- read_h5ad_index(st_h5[["obs"]])  # length S
 st_gene_ids  <- read_h5ad_index(st_h5[["var"]])  # length G (st's own gene list)
 n_spots      <- length(spot_ids)

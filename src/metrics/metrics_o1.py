@@ -15,15 +15,15 @@ from ..utils.io import load_sc_adata
 logger = logging.getLogger(__name__)
 
 
-def compute_metrics_scRNA(dataset_folder: Path) -> Dict[str, float]:
+def compute_metrics_scRNA(sc_path: Path, st_path: Path) -> Dict[str, float]:
     """
     Load input scRNA data from sc.h5ad & compute basic metrics.
     """
-    adata_sc = load_sc_adata(dataset_folder)
+    adata_sc = load_sc_adata(sc_path)
     sc_genes = set(adata_sc.var_names)
 
     # Split result genes in marker and non-marker genes
-    marker_genes = set(get_shared_genes(dataset_folder))
+    marker_genes = set(get_shared_genes(sc_path, st_path))
     marker_genes_sc = list(sc_genes.intersection(marker_genes))
     non_marker_genes_sc = list(sc_genes.difference(marker_genes))
 
@@ -43,21 +43,19 @@ def compute_metrics_scRNA(dataset_folder: Path) -> Dict[str, float]:
     )
 
 
-def compute_metrics_o1(dataset_folder: Path, result_gep: AnnData) -> Dict[str, float]:
+def compute_metrics_o1(
+    sc_path: Path, st_path: Path, result_gep: AnnData
+) -> Dict[str, float]:
     """
     Load predicted GEP file as pandas DataFrame & compute basic metrics.
 
     result_gep: Predicted Z' (G x S)
 
     """
-
-    if not dataset_folder.exists():
-        raise FileNotFoundError(f"Datensatzordner nicht gefunden: {dataset_folder}")
-
     genes = result_gep.obs_names
 
     # Split genes in marker and non-marker genes
-    marker_genes = set(get_shared_genes(dataset_folder))
+    marker_genes = set(get_shared_genes(sc_path, st_path))
     result_genes_set = set(genes)
     marker_genes_in_result = list(result_genes_set.intersection(marker_genes))
     non_marker_genes_in_result = list(result_genes_set.difference(marker_genes))
@@ -287,7 +285,8 @@ def create_log_norms_boxplots(
 
 
 def main(
-    dataset_folder: Path,
+    sc_path: Path,
+    st_path: Path,
     result_gep: AnnData,
     metrics_output_path: Path,
     compute_scRNA_metrics: bool = False,
@@ -299,7 +298,8 @@ def main(
     - Visualize norms distributions (histograms + boxplots) for scRNA data and predicted GEP data
 
     Args:
-        dataset_folder:
+        sc_path: Full path to sc.h5ad.
+        st_path: Full path to st.h5ad.
         result_gep: Predicted Z' (G x S)
         metrics_output_path:
 
@@ -310,7 +310,7 @@ def main(
 
     if compute_scRNA_metrics:
         # Compute metrics on scRNA data
-        res_scrna = compute_metrics_scRNA(dataset_folder)
+        res_scrna = compute_metrics_scRNA(sc_path, st_path)
 
         # Save result
         metrics_output_path.mkdir(parents=True, exist_ok=True)
@@ -360,7 +360,7 @@ def main(
         )
 
     # Compute metrics for o1
-    res = compute_metrics_o1(dataset_folder, result_gep)
+    res = compute_metrics_o1(sc_path, st_path, result_gep)
 
     # Save result
     metrics_dir = metrics_output_path / "o1"

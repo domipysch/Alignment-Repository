@@ -14,7 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 def tangram_align_data(
-    dataset_folder: str,
+    sc_path: Path,
+    st_path: Path,
     normalize_and_log: bool,
     deterministic_mapping: bool,
     compute_marker_genes: bool,
@@ -23,11 +24,12 @@ def tangram_align_data(
     output_path: Path,
 ) -> AnnData:
     """
-    Run Tangram alignment on a prepared dataset in given folder.
+    Run Tangram alignment on a prepared dataset.
     Saves prediction GEP CSV to output_path.
 
     Args:
-        dataset_folder: Path to dataset folder
+        sc_path: Full path to sc.h5ad
+        st_path: Full path to st.h5ad
         normalize_and_log: Should the sc and st input data be normalized and log-transformed before alignment?
         deterministic_mapping: Should the cell-to-spot mapping be turned deterministic before multiplication wit sc-data?
             (one cell type per spot, one hot encoding)
@@ -38,12 +40,13 @@ def tangram_align_data(
 
     Returns: -
     """
-    assert os.path.isdir(dataset_folder), f"Dataset folder not found: {dataset_folder}"
+    assert Path(sc_path).exists(), f"sc.h5ad not found: {sc_path}"
+    assert Path(st_path).exists(), f"st.h5ad not found: {st_path}"
 
     # Load input scRNA and ST data
     logger.info("Load data")
-    adata_sc = load_sc_adata(Path(dataset_folder))  # C x G
-    adata_st = load_st_adata(Path(dataset_folder))  # S x G
+    adata_sc = load_sc_adata(Path(sc_path))  # C x G
+    adata_st = load_st_adata(Path(st_path))  # S x G
     logger.info("Data loaded")
     logger.info(f"Single Cell Data: {adata_sc.n_obs} cells x {adata_sc.n_vars} genes")
     logger.info(f"Spatial Data: {adata_st.n_obs} spots x {adata_st.n_vars} genes")
@@ -203,7 +206,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Run Tangram alignment on a dataset folder"
     )
-    parser.add_argument("-d", "--dataset", type=str, help="Path to dataset folder")
+    parser.add_argument(
+        "--scdata", type=Path, required=True, help="Full path to sc.h5ad"
+    )
+    parser.add_argument(
+        "--stdata", type=Path, required=True, help="Full path to st.h5ad"
+    )
     parser.add_argument(
         "-o", "--output_path", type=str, help="Path where to store result"
     )
@@ -235,7 +243,8 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     tangram_align_data(
-        args.dataset,
+        args.scdata,
+        args.stdata,
         normalize_and_log=args.normalize_and_log,
         deterministic_mapping=args.deterministic,
         compute_marker_genes=args.compute_marker_genes,

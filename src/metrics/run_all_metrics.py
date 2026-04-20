@@ -14,7 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 def main(
-    dataset: Path,
+    sc_path: Path,
+    st_path: Path,
     metrics: Path,
     result_gep: AnnData,
     run_permutation_tests: bool = False,
@@ -22,7 +23,8 @@ def main(
     """
 
     Args:
-        dataset:
+        sc_path: Full path to sc.h5ad.
+        st_path: Full path to st.h5ad.
         result_gep: Predicted Z' (G x S)
         metrics:
         run_permutation_tests:
@@ -31,14 +33,14 @@ def main(
 
     """
     # Run metrics computations
-    main1(dataset, result_gep, metrics)
-    main2(dataset, result_gep, metrics)
-    main4(dataset, result_gep, metrics)
+    main1(sc_path, st_path, result_gep, metrics)
+    main2(sc_path, st_path, result_gep, metrics)
+    main4(sc_path, st_path, result_gep, metrics)
 
     # Run permutation tests
     if run_permutation_tests:
-        main2permutation(dataset, result_gep, metrics)
-        main4permutation(dataset, result_gep, metrics)
+        main2permutation(sc_path, st_path, result_gep, metrics)
+        main4permutation(sc_path, st_path, result_gep, metrics)
 
 
 if __name__ == "__main__":
@@ -49,7 +51,12 @@ if __name__ == "__main__":
     )
 
     parser = argparse.ArgumentParser(description="Run all metrics on a result file")
-    parser.add_argument("-d", "--dataset", type=Path, help="Path to dataset folder")
+    parser.add_argument(
+        "--scdata", type=Path, required=True, help="Full path to sc.h5ad"
+    )
+    parser.add_argument(
+        "--stdata", type=Path, required=True, help="Full path to st.h5ad"
+    )
     parser.add_argument("-r", "--result", type=Path, help="Path to result file")
     parser.add_argument(
         "-m", "--metrics", type=Path, help="Path to output metric folder"
@@ -58,9 +65,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     logger.info("Starting metrics computation for:")
-    logger.info("Dataset path: %s", args.dataset)
+    logger.info("SC data path: %s", args.scdata)
+    logger.info("ST data path: %s", args.stdata)
     logger.info("Result file path: %s", args.result)
     logger.info("Metrics output folder: %s", args.metrics)
 
     result_gep = ad.read_h5ad(args.result)
-    main(args.dataset, args.metrics, result_gep, run_permutation_tests=False)
+    main(
+        args.scdata, args.stdata, args.metrics, result_gep, run_permutation_tests=False
+    )

@@ -1,3 +1,14 @@
+data:
+  sc_path: C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\04_ColorectalCancer\sc.h5ad
+  st_paths:
+    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\04_ColorectalCancer\patches_4x4\patch_2_2\st_top30hvg.h5ad
+    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\04_ColorectalCancer\patches_4x4\patch_2_2\st_top50hvg.h5ad
+    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\04_ColorectalCancer\patches_4x4\patch_2_2\st_top100hvg.h5ad
+    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\04_ColorectalCancer\patches_4x4\patch_2_2\st_top200hvg.h5ad
+    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\04_ColorectalCancer\patches_4x4\patch_2_2\st.h5ad
+output:
+  result_folder: C:\Users\zi69hebi\Dev\10_Alignment\Data\02_Results\04_ColorectalCancer_4patch22_VaryHVGS
+  metric_folder: C:\Users\zi69hebi\Dev\10_Alignment\Data\03_Metrics\04_ColorectalCancer_4patch22_VaryHVGS
 mapping:
   deterministic: true
 graph:
@@ -12,10 +23,7 @@ model:
   dec_hidden_dim:
     - 256
   K:
-    - 500
-    - 1000
-    - 2000
-    - 5000
+    - 20
 training:
   lr:
 #    - 0.008

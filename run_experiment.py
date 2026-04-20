@@ -95,28 +95,38 @@ def run_config(
 
 
 def main(
-    sc_path: Path,
-    st_path: Path,
-    metrics_dataset: Path,
     experiment_config: Path,
-    result_folder: Path,
-    metric_folder: Path,
     save_result: bool = False,
     run_permutation_tests: bool = False,
 ):
 
     if not experiment_config.exists():
         raise FileNotFoundError(f"experiment_config not found: {experiment_config}")
-    if not sc_path.exists():
-        raise FileNotFoundError(f"sc.h5ad not found: {sc_path}")
-    if not st_path.exists():
-        raise FileNotFoundError(f"st.h5ad not found: {st_path}")
 
     # Load experiment config
     with open(experiment_config, "r") as f:
         base_cfg = yaml.safe_load(f) or {}
     if not isinstance(base_cfg, dict):
         raise ValueError("Top-level experiment_config must be a mapping/dict.")
+
+    # Extract and validate data/output sections (not part of the grid search)
+    if "data" not in base_cfg:
+        raise ValueError("experiment_config must contain a 'data' section.")
+    if "output" not in base_cfg:
+        raise ValueError("experiment_config must contain an 'output' section.")
+    data_cfg = base_cfg.pop("data")
+    output_cfg = base_cfg.pop("output")
+
+    sc_path = Path(data_cfg["sc_path"])
+    st_paths = [Path(p) for p in data_cfg["st_paths"]]
+    result_folder = Path(output_cfg["result_folder"])
+    metric_folder = Path(output_cfg["metric_folder"])
+
+    if not sc_path.exists():
+        raise FileNotFoundError(f"sc.h5ad not found: {sc_path}")
+    for st_path in st_paths:
+        if not st_path.exists():
+            raise FileNotFoundError(f"st.h5ad not found: {st_path}")
 
     # Helper: collect leaf paths -> list of values (lists become value lists, scalars become singleton list)
     def collect_leaves(node, path=()):
@@ -178,25 +188,9 @@ def main(
         total_runs *= len(v)
 
     logger.info(
-        f"Experiment config loaded from {experiment_config}. Total runs to execute: {total_runs}"
+        f"Experiment config loaded from {experiment_config}. "
+        f"Total runs per dataset: {total_runs}, datasets: {len(st_paths)}"
     )
-
-    if os.path.exists(result_folder):
-        shutil.rmtree(result_folder)
-    if os.path.exists(metric_folder):
-        shutil.rmtree(metric_folder)
-    result_folder.mkdir(parents=True, exist_ok=False)
-    metric_folder.mkdir(parents=True, exist_ok=False)
-
-    # Copy experiment config to result folder for reference
-    shutil.copy(experiment_config, result_folder / "experiment_config.yml")
-
-    # Prepare summary CSV
-    summary_path = result_folder / "summary.csv"
-    write_header = not summary_path.exists()
-
-    # Iterate over grid
-    combo_iter = itertools.product(*lists)
 
     # Function to set a value in nested dict by path
     def set_in_dict(d: dict, path: tuple, value):
@@ -207,11 +201,34 @@ def main(
             cur = cur[key]
         cur[path[-1]] = value
 
-    run_id = 0
-    with open(summary_path, "a", newline="") as summary_file:
+    for st_path in st_paths:
+        dataset_name = f"{st_path.parent.name}_{st_path.stem}"
+        metrics_dataset = st_path.parent
+        ds_result_folder = result_folder / dataset_name
+        ds_metric_folder = metric_folder / dataset_name
 
-        writer = csv.writer(summary_file)
-        if write_header:
+        logger.info(f"=== Dataset: {dataset_name} ===")
+
+        if os.path.exists(ds_result_folder):
+            shutil.rmtree(ds_result_folder)
+        if os.path.exists(ds_metric_folder):
+            shutil.rmtree(ds_metric_folder)
+        ds_result_folder.mkdir(parents=True, exist_ok=False)
+        ds_metric_folder.mkdir(parents=True, exist_ok=False)
+
+        # Copy experiment config to result folder for reference
+        shutil.copy(experiment_config, ds_result_folder / "experiment_config.yml")
+
+        # Prepare summary CSV
+        summary_path = ds_result_folder / "summary.csv"
+
+        # Iterate over grid
+        combo_iter = itertools.product(*lists)
+
+        run_id = 0
+        with open(summary_path, "w", newline="") as summary_file:
+
+            writer = csv.writer(summary_file)
             writer.writerow(
                 [
                     "id",
@@ -229,136 +246,123 @@ def main(
                 ]
             )
 
-        for combo in combo_iter:
-            # Build run-specific config
-            cfg_copy = copy.deepcopy(base_cfg)
-            for path, val in zip(paths, combo):
-                set_in_dict(cfg_copy, path, val)
+            for combo in combo_iter:
+                # Build run-specific config
+                cfg_copy = copy.deepcopy(base_cfg)
+                for path, val in zip(paths, combo):
+                    set_in_dict(cfg_copy, path, val)
 
-            run_dir = result_folder / str(run_id)
-            run_dir.mkdir(parents=True, exist_ok=True)
-            run_config_path = run_dir / "config.yml"
-            with open(run_config_path, "w") as cf:
-                yaml.safe_dump(cfg_copy, cf, sort_keys=False)
+                run_dir = ds_result_folder / str(run_id)
+                run_dir.mkdir(parents=True, exist_ok=True)
+                run_config_path = run_dir / "config.yml"
+                with open(run_config_path, "w") as cf:
+                    yaml.safe_dump(cfg_copy, cf, sort_keys=False)
 
-            result_path = run_dir / "result_GEP.h5ad"
+                result_path = run_dir / "result_GEP.h5ad"
 
-            metric_dir = metric_folder / str(run_id)
-            metric_dir.mkdir(parents=True, exist_ok=False)
+                metric_dir = ds_metric_folder / str(run_id)
+                metric_dir.mkdir(parents=True, exist_ok=False)
 
-            # if mode is 'deterministic', then also create a folder "<run_id>_det"
-            metric_dir_det = None
-            if cfg_copy["mapping"]["deterministic"]:
-                metric_dir_det = metric_folder / f"{run_id}_det"
-                metric_dir_det.mkdir(parents=True, exist_ok=False)
+                # if mode is 'deterministic', then also create a folder "<run_id>_det"
+                metric_dir_det = None
+                if cfg_copy["mapping"]["deterministic"]:
+                    metric_dir_det = ds_metric_folder / f"{run_id}_det"
+                    metric_dir_det.mkdir(parents=True, exist_ok=False)
 
-            start = time.time()
-            try:
-                logger.info(
-                    f"Starting run {run_id}/{total_runs - 1} -> writing to {run_dir}"
-                )
-                losses_after_last_epoch = run_config(
-                    sc_path,
-                    st_path,
-                    metrics_dataset,
-                    run_config_path,
-                    (run_dir / "gep.h5ad") if save_result else None,
-                    (run_dir / "mapping.csv") if save_result else None,
-                    metric_dir,
-                    metric_dir_det if metric_dir_det is not None else "",
-                    run_permutation_tests=run_permutation_tests,
-                )
-                duration = time.time() - start
-                writer.writerow(
-                    [
-                        run_id,
-                        str(run_config_path),
-                        str(result_path),
-                        "ok",
-                        f"{duration:.3f}",
-                        "",
-                        losses_after_last_epoch["rec_spot"],
-                        losses_after_last_epoch["rec_gene"],
-                        losses_after_last_epoch["rec_state"],
-                        losses_after_last_epoch["clust"],
-                        losses_after_last_epoch["state_entropy"],
-                        losses_after_last_epoch["spot_entropy"],
-                    ]
-                )
-                logger.info(f"Run {run_id} completed in {duration:.2f}s")
+                start = time.time()
+                try:
+                    logger.info(
+                        f"Starting run {run_id}/{total_runs - 1} -> writing to {run_dir}"
+                    )
+                    losses_after_last_epoch = run_config(
+                        sc_path,
+                        st_path,
+                        metrics_dataset,
+                        run_config_path,
+                        (run_dir / "gep.h5ad") if save_result else None,
+                        (run_dir / "mapping.csv") if save_result else None,
+                        metric_dir,
+                        metric_dir_det if metric_dir_det is not None else "",
+                        run_permutation_tests=run_permutation_tests,
+                    )
+                    duration = time.time() - start
+                    writer.writerow(
+                        [
+                            run_id,
+                            str(run_config_path),
+                            str(result_path),
+                            "ok",
+                            f"{duration:.3f}",
+                            "",
+                            losses_after_last_epoch["rec_spot"],
+                            losses_after_last_epoch["rec_gene"],
+                            losses_after_last_epoch["rec_state"],
+                            losses_after_last_epoch["clust"],
+                            losses_after_last_epoch["state_entropy"],
+                            losses_after_last_epoch["spot_entropy"],
+                        ]
+                    )
+                    logger.info(f"Run {run_id} completed in {duration:.2f}s")
 
-            except Exception as e:
-                duration = time.time() - start
-                tb = traceback.format_exc()
-                logger.error(f"Run {run_id} failed after {duration:.2f}s: {e}\n{tb}")
-                writer.writerow(
-                    [
-                        run_id,
-                        str(run_config_path),
-                        str(result_path),
-                        "error",
-                        f"{duration:.3f}",
-                        str(e),
-                        "",
-                        "",
-                        "",
-                        "",
-                        "",
-                        "",
-                    ]
-                )
-                # Stop on first error as requested
-                raise
+                except Exception as e:
+                    duration = time.time() - start
+                    tb = traceback.format_exc()
+                    logger.error(
+                        f"Run {run_id} failed after {duration:.2f}s: {e}\n{tb}"
+                    )
+                    writer.writerow(
+                        [
+                            run_id,
+                            str(run_config_path),
+                            str(result_path),
+                            "error",
+                            f"{duration:.3f}",
+                            str(e),
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                            "",
+                        ]
+                    )
+                    # Stop on first error as requested
+                    raise
 
-            run_id += 1
+                run_id += 1
 
-    # Create shared boxplots
-    metric_folder_shared = metric_folder / "shared"
-    metric_folder_shared.mkdir(parents=True, exist_ok=True)
-    run_names = list(map(str, range(run_id)))
-    if base_cfg["mapping"]["deterministic"]:
-        run_names += list(f"{runid}_det" for runid in range(run_id))
-    create_shared_boxplots(
-        run_names,
-        metric_folder,
-        metric_folder_shared,
-        run_permutation_tests=run_permutation_tests,
-    )
+        # Create shared boxplots for this dataset
+        ds_metric_folder_shared = ds_metric_folder / "shared"
+        ds_metric_folder_shared.mkdir(parents=True, exist_ok=True)
+        run_names = list(map(str, range(run_id)))
+        if base_cfg["mapping"]["deterministic"]:
+            run_names += list(f"{runid}_det" for runid in range(run_id))
+        create_shared_boxplots(
+            run_names,
+            ds_metric_folder,
+            ds_metric_folder_shared,
+            run_permutation_tests=run_permutation_tests,
+        )
 
 
 if __name__ == "__main__":
 
     # 1. Parse Arguments
     parser = argparse.ArgumentParser(
-        description="Run AlternativeIdea alignment on a dataset folder"
+        description="Run AlternativeIdea alignment. Dataset paths and output folders are configured in the experiment YAML."
     )
     parser.add_argument(
-        "--scdata", type=Path, required=True, help="Full path to sc.h5ad"
-    )
-    parser.add_argument(
-        "--stdata", type=Path, required=True, help="Full path to st.h5ad"
-    )
-    parser.add_argument(
-        "--dataset",
+        "-c",
+        "--experiment_config",
         type=Path,
-        required=False,
-        default=None,
-        help="Dataset folder for metrics reference (default: parent of --stdata)",
-    )
-    parser.add_argument(
-        "-c", "--experiment_config", type=Path, help="Path to config.yaml"
-    )
-    parser.add_argument(
-        "-o", "--result_folder", type=Path, help="Path where to store results to"
+        required=True,
+        help="Path to experiment config YAML",
     )
     parser.add_argument(
         "-s",
         "--save_result",
         action="store_true",
-        help="Whether to save the predicte Z prime to disk",
-    )
-    parser.add_argument(
-        "-m", "--metric_folder", type=Path, help="Path where to store metrics to"
+        help="Whether to save the predicted GEP to disk",
     )
     parser.add_argument(
         "--logging",
@@ -385,14 +389,8 @@ if __name__ == "__main__":
     logger.setLevel(level)
 
     # 3. Run
-    metrics_dataset = args.dataset if args.dataset else args.stdata.parent
     main(
-        args.scdata,
-        args.stdata,
-        metrics_dataset,
         args.experiment_config,
-        args.result_folder,
-        args.metric_folder,
         save_result=args.save_result,
         run_permutation_tests=args.run_permutation_tests,
     )

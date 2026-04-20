@@ -1,3 +1,12 @@
+data:
+  sc_path: /path/to/sc.h5ad
+  st_paths:
+    - /path/to/DatasetA/st.h5ad
+
+output:
+  result_folder: /path/to/results
+  metric_folder: /path/to/metrics
+
 mapping:
   deterministic: true
 graph:

@@ -150,33 +150,35 @@ python -m src.metrics.run_all_metrics \
 
 ### Running our novel method
 
+Dataset paths and output folders are configured directly in the experiment YAML (see `experiment_config.yaml`):
+
+```yaml
+data:
+  sc_path: /path/to/sc.h5ad
+  st_paths:
+    - /path/to/DatasetA/st.h5ad
+    - /path/to/DatasetB/st.h5ad  # optional: run once per dataset
+
+output:
+  result_folder: /path/to/results
+  metric_folder: /path/to/metrics
+```
+
+Then run:
+
 ```bash
 conda activate alternative_idea_env
 
 python -m run_experiment \
-  -d <dataset_folder> \
   -c experiment_config.yaml \
-  -o <result_folder> \
-  -m <metrics_folder> \
   [--save_result] \
   [--run_permutation_tests] \
   [--logging verbose]
 ```
 
 The experiment config supports grid search: list values become search axes and the runner executes every combination.
-Results are written to numbered subdirectories with a `summary.csv` tracking status and loss values.
-For more detailed arguments and options, please refer to the script.
-
-Example using `sample_dataset`:
-
-```bash
-conda activate alternative_idea_env
-python -m run_experiment \
-  -d sample_dataset \
-  -c experiment_config.yaml \
-  -o sample_dataset/results \
-  -m sample_dataset/metrics
-```
+When multiple `st_paths` are specified, the full grid search runs once per dataset.
+Results are written to `<result_folder>/<dataset_name>/<run_id>/` with a `summary.csv` per dataset.
 
 ## TODO
 

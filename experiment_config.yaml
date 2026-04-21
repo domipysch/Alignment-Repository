@@ -1,14 +1,16 @@
 data:
-  sc_path: C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\04_ColorectalCancer\sc.h5ad
+  sc_paths:
+    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\03_MouseSSP_HVG2000_perturbed\sc_noise10p00.h5ad
+    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\03_MouseSSP_HVG2000_perturbed\sc_noise20p00.h5ad
+    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\03_MouseSSP_HVG2000_perturbed\sc_noise30p00.h5ad
+    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\03_MouseSSP_HVG2000_perturbed\sc_noise40p00.h5ad
+    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\03_MouseSSP_HVG2000_perturbed\sc_noise50p00.h5ad
   st_paths:
-    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\04_ColorectalCancer\patches_4x4\patch_2_2\st_top30hvg.h5ad
-    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\04_ColorectalCancer\patches_4x4\patch_2_2\st_top50hvg.h5ad
-    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\04_ColorectalCancer\patches_4x4\patch_2_2\st_top100hvg.h5ad
-    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\04_ColorectalCancer\patches_4x4\patch_2_2\st_top200hvg.h5ad
-    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\04_ColorectalCancer\patches_4x4\patch_2_2\st.h5ad
+    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\03_MouseSSP_HVG2000\st.h5ad
+#    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\04_ColorectalCancer\patches_4x4\patch_2_2\st.h5ad
 output:
-  result_folder: C:\Users\zi69hebi\Dev\10_Alignment\Data\02_Results\04_ColorectalCancer_4patch22_VaryHVGS
-  metric_folder: C:\Users\zi69hebi\Dev\10_Alignment\Data\03_Metrics\04_ColorectalCancer_4patch22_VaryHVGS
+  result_folder: C:\Users\zi69hebi\Dev\10_Alignment\Data\02_Results\03_MouseSSP_HVG2000_Noise_2
+  metric_folder: C:\Users\zi69hebi\Dev\10_Alignment\Data\03_Metrics\03_MouseSSP_HVG2000_Noise_2
 mapping:
   deterministic: true
 graph:
@@ -26,11 +28,11 @@ model:
     - 20
 training:
   lr:
-#    - 0.008
+    - 0.008
 #    - 0.005
 #    - 0.01
 #    - 0.02
-    - 0.05
+#    - 0.05
 #    - 0.1
   epochs:
     - 1000

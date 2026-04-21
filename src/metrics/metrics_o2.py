@@ -93,9 +93,13 @@ def compute_metrics_per_gene(
     # Optional: save cossim per gene as JSON
     if save_cossim_json is not None:
         save_cossim_json.parent.mkdir(parents=True, exist_ok=True)
-        # JSON-serializable (floats already)
+        values = list(cossim_dict.values())
+        output = {
+            "median": float(np.median(values)) if values else None,
+            "values": cossim_dict,
+        }
         with save_cossim_json.open("w", encoding="utf-8") as f:
-            json.dump(cossim_dict, f, indent=4)
+            json.dump(output, f, indent=4)
 
 
 def compute_metrics_per_spot(
@@ -153,12 +157,16 @@ def compute_metrics_per_spot(
         if counter % 1000 == 0:
             logging.info(f"Processed {counter}/{adata_predicted_z.n_obs} spots.")
 
-    # Optional: save cossim per gene as JSON
+    # Optional: save cossim per spot as JSON
     if save_cossim_json is not None:
         save_cossim_json.parent.mkdir(parents=True, exist_ok=True)
-        # JSON-serializable (floats already)
+        values = list(cossim_dict.values())
+        output = {
+            "median": float(np.median(values)) if values else None,
+            "values": cossim_dict,
+        }
         with save_cossim_json.open("w", encoding="utf-8") as f:
-            json.dump(cossim_dict, f, indent=4)
+            json.dump(output, f, indent=4)
 
 
 def generate_box_plot_metrics_per_gene(

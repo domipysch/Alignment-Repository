@@ -117,13 +117,14 @@ def main(
     data_cfg = base_cfg.pop("data")
     output_cfg = base_cfg.pop("output")
 
-    sc_path = Path(data_cfg["sc_path"])
+    sc_paths = [Path(p) for p in data_cfg["sc_paths"]]
     st_paths = [Path(p) for p in data_cfg["st_paths"]]
     result_folder = Path(output_cfg["result_folder"])
     metric_folder = Path(output_cfg["metric_folder"])
 
-    if not sc_path.exists():
-        raise FileNotFoundError(f"sc.h5ad not found: {sc_path}")
+    for sc_path in sc_paths:
+        if not sc_path.exists():
+            raise FileNotFoundError(f"sc.h5ad not found: {sc_path}")
     for st_path in st_paths:
         if not st_path.exists():
             raise FileNotFoundError(f"st.h5ad not found: {st_path}")
@@ -187,9 +188,11 @@ def main(
     for v in lists:
         total_runs *= len(v)
 
+    n_configs = len(sc_paths) * len(st_paths)
     logger.info(
         f"Experiment config loaded from {experiment_config}. "
-        f"Total runs per dataset: {total_runs}, datasets: {len(st_paths)}"
+        f"Total runs per SC×ST config: {total_runs}, "
+        f"configs: {n_configs} ({len(sc_paths)} SC × {len(st_paths)} ST)"
     )
 
     # Function to set a value in nested dict by path
@@ -201,8 +204,8 @@ def main(
             cur = cur[key]
         cur[path[-1]] = value
 
-    for st_path in st_paths:
-        dataset_name = f"{st_path.parent.name}_{st_path.stem}"
+    for sc_path, st_path in itertools.product(sc_paths, st_paths):
+        dataset_name = f"{sc_path.parent.name}_{sc_path.stem}__{st_path.parent.name}_{st_path.stem}"
         metrics_dataset = st_path.parent
         ds_result_folder = result_folder / dataset_name
         ds_metric_folder = metric_folder / dataset_name
@@ -341,6 +344,29 @@ def main(
             run_names,
             ds_metric_folder,
             ds_metric_folder_shared,
+            run_permutation_tests=run_permutation_tests,
+        )
+
+    # Create cross-dataset shared boxplots (one box per dataset, best/only run per dataset)
+    if len(sc_paths) * len(st_paths) > 1:
+        all_metric_folders = []
+        all_labels = []
+        for sc_path, st_path in itertools.product(sc_paths, st_paths):
+            dataset_name = f"{sc_path.parent.name}_{sc_path.stem}__{st_path.parent.name}_{st_path.stem}"
+            ds_metric_folder = metric_folder / dataset_name
+            for run_id_str in map(str, range(total_runs)):
+                all_metric_folders.append(ds_metric_folder / run_id_str)
+                all_labels.append(f"{dataset_name}/{run_id_str}")
+            if base_cfg["mapping"]["deterministic"]:
+                for run_id_str in map(str, range(total_runs)):
+                    all_metric_folders.append(ds_metric_folder / f"{run_id_str}_det")
+                    all_labels.append(f"{dataset_name}/{run_id_str}_det")
+        cross_dataset_shared = metric_folder / "shared"
+        cross_dataset_shared.mkdir(parents=True, exist_ok=True)
+        create_shared_boxplots(
+            all_labels,
+            metric_folder,
+            cross_dataset_shared,
             run_permutation_tests=run_permutation_tests,
         )
 

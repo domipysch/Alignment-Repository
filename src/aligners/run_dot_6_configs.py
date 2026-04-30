@@ -65,6 +65,7 @@ if __name__ == "__main__":
         "HSO",
         "probabilistic-mapping",
         map_cell_types=False,
+        cell_type_key="cellType",
         output_path=output_path,
     )
     run_all_metrics.main(
@@ -121,6 +122,7 @@ if __name__ == "__main__":
         "HSO",
         "deterministic-mapping",
         map_cell_types=False,
+        cell_type_key="cellType",
         output_path=output_path,
     )
     run_all_metrics.main(

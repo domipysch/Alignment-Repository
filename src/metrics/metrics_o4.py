@@ -547,7 +547,12 @@ def add_own_metrics_to_edges(
     # helper to get dense 1D numpy array for a given spot id (obs_name)
     def _get_spot_vector(adata: AnnData, spot_id: str) -> np.ndarray:
         row_idx = int(np.where(np.asarray(adata.obs_names) == spot_id)[0][0])
-        return np.asarray(adata.X[row_idx]).ravel().astype(float)
+        row = adata.X[row_idx]
+        return (
+            (row.toarray() if hasattr(row, "toarray") else np.asarray(row))
+            .ravel()
+            .astype(float)
+        )
 
     # metrics to compute (name, function)
     metrics = [

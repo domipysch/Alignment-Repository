@@ -1,16 +1,11 @@
 data:
   sc_paths:
-    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\03_MouseSSP_HVG2000_perturbed\sc_noise10p00.h5ad
-    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\03_MouseSSP_HVG2000_perturbed\sc_noise20p00.h5ad
-    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\03_MouseSSP_HVG2000_perturbed\sc_noise30p00.h5ad
-    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\03_MouseSSP_HVG2000_perturbed\sc_noise40p00.h5ad
-    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\03_MouseSSP_HVG2000_perturbed\sc_noise50p00.h5ad
+    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\04_ColorectalCancer\sc.h5ad
   st_paths:
-    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\03_MouseSSP_HVG2000\st.h5ad
-#    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\04_ColorectalCancer\patches_4x4\patch_2_2\st.h5ad
+    - C:\Users\zi69hebi\Dev\10_Alignment\Data\01_Datasets\04_ColorectalCancer\patches_4x4\patch_2_2\st.h5ad
 output:
-  result_folder: C:\Users\zi69hebi\Dev\10_Alignment\Data\02_Results\03_MouseSSP_HVG2000_Noise_2
-  metric_folder: C:\Users\zi69hebi\Dev\10_Alignment\Data\03_Metrics\03_MouseSSP_HVG2000_Noise_2
+  result_folder: C:\Users\zi69hebi\Dev\10_Alignment\Data\03_Results_230426\04_ColorectalCancer
+  metric_folder: C:\Users\zi69hebi\Dev\10_Alignment\Data\04_Metrics_230426\04_ColorectalCancer
 mapping:
   deterministic: true
 graph:
@@ -25,15 +20,13 @@ model:
   dec_hidden_dim:
     - 256
   K:
+    - 5
+    - 10
+    - 15
     - 20
 training:
   lr:
     - 0.008
-#    - 0.005
-#    - 0.01
-#    - 0.02
-#    - 0.05
-#    - 0.1
   epochs:
     - 1000
   dropout_decoder:
@@ -44,11 +37,8 @@ training:
     - true
 loss_weights:
   - lambda_rec_spot: 1.0
-#    lambda_rec_gene: 1.0
     lambda_rec_gene: 0
     lambda_rec_state: 0
     lambda_clust: 0
-#    lambda_state_entropy: 0.20
-#    lambda_spot_entropy: 0.15
     lambda_state_entropy: 0.01
     lambda_spot_entropy: 0.008

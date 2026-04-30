@@ -15,8 +15,8 @@ def tacco_align_data(
     st_path: Path,
     deterministic_mapping: bool,
     map_cell_types: bool,
-    cell_type_key: str = "cellType",
-    output_path: Path = None,
+    cell_type_key: str,
+    output_path: Path,
 ) -> AnnData:
     """
     Run TACCO alignment on a prepared dataset.

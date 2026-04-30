@@ -1,0 +1,280 @@
+"""
+Run post-mapping analysis for every K-run inside a result folder.
+
+Usage
+-----
+    python -m run_analyses_per_k -r <result_folder> [--leiden_resolution 0.5] [--no_normalize]
+                                 [--metrics_folder <path>]
+
+Example
+-------
+    python -m run_analyses_per_k \
+        -r C:/Users/zi69hebi/Dev/10_Alignment/Data/03_Results_230426/03_MouseSSP_HVG2000 \
+        --metrics_folder C:/Users/zi69hebi/Dev/10_Alignment/Data/04_Metrics_270426/03_MouseSSP_HVG2000
+
+Expected result_folder layout (as produced by run_experiment.py)
+----------------------------------------------------------------
+    <result_folder>/
+      <sc_stem>__<st_stem>/
+        experiment_config.yml   ← contains sc_paths / st_paths
+        summary.csv
+        0/
+          config.yml            ← contains model.K
+          intermediate/
+            B_thresh.h5ad       ← soft cell-to-state matrix  (n_cells × K)
+            C_thresh.h5ad       ← soft spot-to-state matrix  (n_spots × K)
+        1/ ...
+
+Outputs (per run, written next to intermediate/ and loss/)
+----------------------------------------------------------
+    <run_folder>/analysis/
+        cell_mapping.csv
+        spot_mapping.csv
+        cell_state_fractions.png
+        cell_state_profiles.h5ad
+        umap_computed.png
+        umap_leiden.png
+        metrics_comparison.csv
+        centroid_matching_scores.csv
+
+Overview (written once after all runs)
+---------------------------------------
+    <sc_stem>__<st_stem>/analysis_overview.csv
+        One row per run: K, all clustering metrics (computed / leiden / leiden_shared),
+        Hungarian cosine similarity, greedy cosine similarity.
+"""
+
+import argparse
+import json
+import logging
+import sys
+from pathlib import Path
+
+import anndata as ad
+import pandas as pd
+import yaml
+
+from src.alternative_idea.src.evaluate_k.analysis import run_analysis
+from src.alternative_idea.src.evaluate_k.report import (
+    generate_per_k_report,
+    generate_summary_report,
+)
+
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s  %(levelname)s  %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+
+def _find_pair_dir(result_folder: Path) -> Path:
+    """Return the single <sc>__<st> subdirectory."""
+    candidates = [d for d in result_folder.iterdir() if d.is_dir()]
+    if len(candidates) != 1:
+        raise ValueError(
+            f"Expected exactly one sc__st subdirectory in {result_folder}, "
+            f"found: {[d.name for d in candidates]}"
+        )
+    return candidates[0]
+
+
+def _load_experiment_config(pair_dir: Path) -> dict:
+    config_path = pair_dir / "experiment_config.yml"
+    if not config_path.exists():
+        raise FileNotFoundError(f"experiment_config.yml not found in {pair_dir}")
+    with open(config_path) as f:
+        return yaml.safe_load(f)
+
+
+def _run_dirs(pair_dir: Path) -> list[Path]:
+    """Return all numbered run directories, sorted numerically."""
+    dirs = [d for d in pair_dir.iterdir() if d.is_dir() and d.name.isdigit()]
+    return sorted(dirs, key=lambda d: int(d.name))
+
+
+def _load_K(run_dir: Path) -> int:
+    config_path = run_dir / "config.yml"
+    with open(config_path) as f:
+        cfg = yaml.safe_load(f)
+    return int(cfg["model"]["K"])
+
+
+def _read_median_cossim(
+    metrics_folder: Path, run_id: str
+) -> tuple[float | None, float | None]:
+    """Return (gene_median, spot_median) from the o2 cossim JSONs, or (None, None)."""
+    pair_dirs = [d for d in metrics_folder.iterdir() if d.is_dir()]
+    if not pair_dirs:
+        return None, None
+    pair_dir = pair_dirs[0]  # single pair subdir like <sc_stem>__<st_stem>
+
+    run_subdir = pair_dir / run_id
+    if not run_subdir.is_dir():
+        logger.warning("metrics run dir not found: %s", run_subdir)
+        return None, None
+
+    def _read_median(json_path: Path) -> float | None:
+        if not json_path.exists():
+            logger.warning("cossim JSON not found: %s", json_path)
+            return None
+        with open(json_path) as f:
+            return float(json.load(f)["median"])
+
+    gene_median = _read_median(run_subdir / "o2" / "boxplots_per_gene" / "cossim.json")
+    spot_median = _read_median(run_subdir / "o2" / "boxplots_per_spot" / "cossim.json")
+    return gene_median, spot_median
+
+
+def main(
+    result_folder: Path,
+    leiden_resolution: float = 0.5,
+    leiden_resolution_fine: float = 2.0,
+    normalize: bool = True,
+    max_auc_iter: int = 50,
+    metrics_folder: Path | None = None,
+) -> None:
+    result_folder = Path(result_folder)
+
+    pair_dir = _find_pair_dir(result_folder)
+    logger.info("Pair directory: %s", pair_dir)
+
+    exp_cfg = _load_experiment_config(pair_dir)
+    sc_path = Path(exp_cfg["data"]["sc_paths"][0])
+    st_path = Path(exp_cfg["data"]["st_paths"][0])
+
+    logger.info("Loading sc data from %s", sc_path)
+    adata_sc = ad.read_h5ad(sc_path)
+    logger.info("Loading st data from %s", st_path)
+    adata_st = ad.read_h5ad(st_path)
+
+    run_dirs = _run_dirs(pair_dir)
+    if not run_dirs:
+        logger.error("No numbered run directories found in %s", pair_dir)
+        sys.exit(1)
+
+    logger.info("Found %d run(s): %s", len(run_dirs), [d.name for d in run_dirs])
+
+    summary_rows: list[dict] = []
+
+    for run_dir in run_dirs:
+        K = _load_K(run_dir)
+        intermediate = run_dir / "intermediate"
+
+        b_path = intermediate / "B_thresh.h5ad"
+        c_path = intermediate / "C_thresh.h5ad"
+
+        if not b_path.exists() or not c_path.exists():
+            logger.warning(
+                "Run %s: B_thresh.h5ad or C_thresh.h5ad missing — skipping",
+                run_dir.name,
+            )
+            continue
+
+        logger.info("=== Run %s  (K=%d) ===", run_dir.name, K)
+
+        B = ad.read_h5ad(b_path).X
+        C = ad.read_h5ad(c_path).X
+
+        output_dir = run_dir / "analysis"
+        results = run_analysis(
+            adata_sc=adata_sc,
+            adata_st=adata_st,
+            B=B,
+            C=C,
+            output_dir=output_dir,
+            K=K,
+            leiden_resolution=leiden_resolution,
+            leiden_resolution_fine=leiden_resolution_fine,
+            normalize=normalize,
+            max_auc_iter=max_auc_iter,
+        )
+        logger.info("Run %s done → %s", run_dir.name, output_dir)
+
+        gene_median, spot_median = (
+            _read_median_cossim(metrics_folder, run_dir.name)
+            if metrics_folder is not None
+            else (None, None)
+        )
+        generate_per_k_report(
+            output_dir,
+            K,
+            run_dir.name,
+            median_cossim_gene=gene_median,
+            median_cossim_spot=spot_median,
+        )
+
+        row: dict = {"run": run_dir.name, "K": K}
+        for metric, value in results["metrics_computed"].items():
+            row[f"{metric}__computed"] = value
+        row["hungarian_cosim"] = results["centroid_matching"]["hungarian_score"]
+        row["greedy_cosim"] = results["centroid_matching"]["greedy_score"]
+        row["contingency_score"] = results["contingency_matching"]["score"]
+        row["median_cossim_gene"] = gene_median
+        row["median_cossim_spot"] = spot_median
+        summary_rows.append(row)
+
+    if summary_rows:
+        overview_path = pair_dir / "analysis_overview.csv"
+        df = pd.DataFrame(summary_rows).set_index("run").T
+        df.to_csv(overview_path, index=True)
+        logger.info("Overview CSV → %s", overview_path)
+        generate_summary_report(pair_dir)
+
+    logger.info("All runs complete.")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Run post-mapping analysis for every K-run in a result folder."
+    )
+    parser.add_argument(
+        "-r",
+        "--result_folder",
+        type=Path,
+        required=True,
+        help="Result folder produced by run_experiment.py",
+    )
+    parser.add_argument(
+        "--leiden_resolution",
+        type=float,
+        default=0.5,
+        help="Resolution for the Leiden reference clustering (default: 0.5)",
+    )
+    parser.add_argument(
+        "--leiden_resolution_fine",
+        type=float,
+        default=2.0,
+        help="Resolution for the fine Leiden used in contingency matching (default: 2.0)",
+    )
+    parser.add_argument(
+        "--max_auc_iter",
+        type=int,
+        default=50,
+        help="Maximum refinement iterations for AUC matching (default: 50)",
+    )
+    parser.add_argument(
+        "--no_normalize",
+        action="store_true",
+        help="Skip normalize_total + log1p (use if adata_sc is already log-normalised)",
+    )
+    parser.add_argument(
+        "--metrics_folder",
+        type=Path,
+        default=None,
+        help=(
+            "Optional: path to the metrics folder produced by run_all_metrics "
+            "(e.g. Data/04_Metrics_270426/03_MouseSSP_HVG2000). "
+            "When provided, genewise and spotwise median cosine similarity are "
+            "read from o2/boxplots_per_gene/cossim.json and "
+            "o2/boxplots_per_spot/cossim.json and included in per-K PDF reports."
+        ),
+    )
+    args = parser.parse_args()
+
+    main(
+        result_folder=args.result_folder,
+        leiden_resolution=args.leiden_resolution,
+        leiden_resolution_fine=args.leiden_resolution_fine,
+        normalize=not args.no_normalize,
+        max_auc_iter=args.max_auc_iter,
+        metrics_folder=args.metrics_folder,
+    )

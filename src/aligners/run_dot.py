@@ -32,8 +32,8 @@ def dot_align_data(
     mode: str,
     mapping_mode: str,
     map_cell_types: bool,
-    cell_type_key: str = "cellType",
-    output_path: Path = None,
+    cell_type_key: str,
+    output_path: Path,
 ) -> AnnData:
     """
     Run DOT alignment by calling run_dot.R via Rscript.

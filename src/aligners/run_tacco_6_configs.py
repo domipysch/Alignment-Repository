@@ -64,6 +64,7 @@ if __name__ == "__main__":
         args.stdata,
         deterministic_mapping=False,
         map_cell_types=False,
+        cell_type_key="cellType",
         output_path=output_path,
     )
     # predicted_gep = ad.read_h5ad(output_path)  # If already computed
@@ -119,6 +120,7 @@ if __name__ == "__main__":
         args.stdata,
         deterministic_mapping=True,
         map_cell_types=False,
+        cell_type_key="cellType",
         output_path=output_path,
     )
     # predicted_gep = ad.read_h5ad(output_path)  # If already computed

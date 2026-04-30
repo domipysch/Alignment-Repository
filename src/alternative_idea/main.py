@@ -11,6 +11,7 @@ import torch
 import torch.optim as optim
 import logging
 import numpy as np
+import scipy.sparse as sp
 from anndata import AnnData
 from ..utils.io import anndata_to_csv
 from .src.utils import (
@@ -27,6 +28,47 @@ from .src.dataset import prepare_tensors_from_input
 from .src.utils import graph_type_from_config
 
 logger = logging.getLogger(__name__)
+
+GPU_LIMIT_GB = 6.0
+
+
+def estimate_gpu_memory_gb(
+    num_cells: int,
+    num_spots: int,
+    g_sc: int,
+    g_st: int,
+    num_genes_shared: int,
+    K: int,
+    d: int,
+    enc_hidden_dim: int,
+    dec_hidden_dim: int,
+    use_slim_model: bool,
+) -> float:
+    """Rough upper-bound estimate of GPU memory required (in GB)."""
+    B32 = 4  # bytes per float32
+
+    # Input tensors kept on GPU during training
+    data = (
+        num_cells * g_sc
+        + num_spots * g_st
+        + num_cells * num_genes_shared
+        + num_spots * num_genes_shared
+    ) * B32
+
+    # Trainable parameters + their gradients (factor ×2) + Adam moment estimates (factor ×2)
+    A_bytes = num_spots * num_cells * B32 * 4
+    B_bytes = num_cells * K * B32 * 4
+
+    if use_slim_model:
+        model_params = 0
+    else:
+        enc = g_sc * enc_hidden_dim + enc_hidden_dim + enc_hidden_dim * d + d
+        dec = d * dec_hidden_dim + dec_hidden_dim + dec_hidden_dim * g_st + g_st
+        model_params = (enc + dec) * B32 * 4
+
+    # 50 % overhead for activations, edge index, misc buffers
+    total = (data + A_bytes + B_bytes + model_params) * 1.5
+    return total / (1024**3)
 
 
 def _arr_to_h5ad(
@@ -144,6 +186,7 @@ def alternative_idea_compute_mapping(
     verbose_logging: bool,
     device: torch.device,
     save_intermediate: bool = False,
+    no_gpu_limit: bool = False,
 ) -> tuple[torch.Tensor, torch.Tensor, dict]:
 
     # 1. Load Config
@@ -208,6 +251,27 @@ def alternative_idea_compute_mapping(
     else:
         logging.info("Using full model (locality metrics included)")
         use_slim_model = False
+
+    # GPU memory guard
+    estimated_gb = estimate_gpu_memory_gb(
+        num_cells=num_cells,
+        num_spots=num_spots,
+        g_sc=g_sc,
+        g_st=g_st,
+        num_genes_shared=num_genes_shared,
+        K=model_config["K"],
+        d=model_config["d"],
+        enc_hidden_dim=model_config["enc_hidden_dim"],
+        dec_hidden_dim=model_config["dec_hidden_dim"],
+        use_slim_model=use_slim_model,
+    )
+    logger.info(f"Estimated GPU memory requirement: {estimated_gb:.2f} GB")
+    if not no_gpu_limit and estimated_gb > GPU_LIMIT_GB:
+        logger.error(
+            f"Estimated GPU memory ({estimated_gb:.2f} GB) exceeds the {GPU_LIMIT_GB:.0f} GB limit. "
+            f"Aborting to prevent OOM. Pass --no_gpu_limit to bypass this check."
+        )
+        sys.exit(1)
 
     model: AlternativeIdeaModel | AlternativeIdeaModelNoLocality
     if use_slim_model:
@@ -572,9 +636,8 @@ def compute_gene_expression_prediction(
     use_cm: bool,
 ) -> AnnData:
 
-    adata_sc_tensor = torch.as_tensor(
-        adata_sc.X, dtype=torch.float32, device=torch_device
-    )
+    X_sc = adata_sc.X.toarray() if sp.issparse(adata_sc.X) else np.asarray(adata_sc.X)
+    adata_sc_tensor = torch.as_tensor(X_sc, dtype=torch.float32, device=torch_device)
 
     if deterministic_mapping:
 
@@ -634,6 +697,7 @@ def main(
     mapping_output_path: Optional[Path] = None,
     store_intermediate: bool = False,
     verbose_logging: bool = False,
+    no_gpu_limit: bool = False,
 ) -> tuple[AnnData, Optional[AnnData], AnnData, dict]:
 
     mapping_config, _, _, training_config, _ = load_config(config_path)
@@ -662,6 +726,7 @@ def main(
         verbose_logging=verbose_logging,
         device=device,
         save_intermediate=store_intermediate,
+        no_gpu_limit=no_gpu_limit,
     )  # S x C, plus loss history
     logger.info("Obtained spot-to-cell mapping AnnData.")
     assert spot_to_cell_map.shape == (
@@ -797,6 +862,13 @@ if __name__ == "__main__":
         default="normal",
         help="Logging verbosity. Use 'verbose' for more logs.",
     )
+    parser.add_argument(
+        "--no_gpu_limit",
+        dest="no_gpu_limit",
+        action="store_true",
+        default=False,
+        help=f"Bypass the {GPU_LIMIT_GB:.0f} GB GPU memory guard and run regardless of estimated memory usage.",
+    )
     args = parser.parse_args()
 
     # Configure logging based on argument
@@ -817,4 +889,5 @@ if __name__ == "__main__":
         args.mapping_output_path,
         verbose_logging=(args.logging == "verbose"),
         store_intermediate=True,
+        no_gpu_limit=args.no_gpu_limit,
     )

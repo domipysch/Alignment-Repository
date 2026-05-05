@@ -140,6 +140,10 @@ def run_analysis(
     cell_states = hard_assignments(B)
     spot_states = hard_assignments(C)
 
+    # Number of states that actually appear after hard assignment
+    n_computed_states = int(len(np.unique(cell_states)))  # unique states among cells
+    n_mapped_states = int(len(np.unique(spot_states)))  # unique states among spots
+
     data_dir = output_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
 
@@ -327,6 +331,8 @@ def run_analysis(
     return {
         "cell_states": cell_states,
         "spot_states": spot_states,
+        "n_computed_states": n_computed_states,
+        "n_mapped_states": n_mapped_states,
         "cell_fractions": cell_fractions,
         "spot_fractions": spot_fractions,
         "state_anndata": adata_states,

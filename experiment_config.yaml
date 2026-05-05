@@ -35,6 +35,7 @@ training:
     - false
   use_cm:
     - true
+  leiden_resolution_overclustering: 2.0
 loss_weights:
   - lambda_rec_spot: 1.0
     lambda_rec_gene: 0
@@ -42,3 +43,5 @@ loss_weights:
     lambda_clust: 0
     lambda_state_entropy: 0.01
     lambda_spot_entropy: 0.008
+    lambda_soft_modularity: 0.0
+    lambda_soft_contingency: 0.0

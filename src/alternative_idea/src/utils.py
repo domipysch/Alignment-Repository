@@ -5,10 +5,108 @@ import anndata as ad
 import pandas as pd
 import logging
 import json
+import torch
 from ...utils.io import load_sc_adata, load_st_adata
 import matplotlib.pyplot as plt
 
 logger = logging.getLogger(__name__)
+
+
+def build_sc_knn_graph(
+    X: torch.Tensor,
+    n_pca_components: int = 50,
+    n_neighbors: int = 15,
+    device=None,
+) -> tuple[torch.Tensor, torch.Tensor, float]:
+    """
+    Precompute a symmetric KNN graph on PCA of X_sc for the soft modularity loss.
+    Only called once before training — not part of the forward pass.
+
+    Args:
+        X              : scRNA-seq data (C x G_sc), as a torch Tensor
+        n_pca_components: number of PCA dimensions to use
+        n_neighbors    : k for the KNN graph
+        device         : torch device to place the output tensors on
+
+    Returns:
+        W      : sparse COO tensor (C x C) — symmetric binary KNN adjacency
+        k      : dense tensor (C,)         — degree of each cell
+        two_m  : float                     — total sum of edge weights (= 2 * #edges)
+    """
+    import numpy as np
+    from sklearn.decomposition import PCA
+    from sklearn.neighbors import kneighbors_graph
+
+    X_np = X.detach().cpu().numpy()
+    n_components = min(n_pca_components, X_np.shape[0] - 1, X_np.shape[1])
+
+    # PCA embedding
+    X_pca = PCA(n_components=n_components).fit_transform(X_np)
+
+    # KNN graph (binary connectivity), then symmetrised
+    A = kneighbors_graph(
+        X_pca, n_neighbors=n_neighbors, mode="connectivity", include_self=False
+    )
+    A = A + A.T  # symmetrize (can double some edges — still binary after sign)
+    A.data[:] = 1.0  # force binary weights
+
+    # Convert to sparse torch COO tensor
+    A_coo = A.tocoo()
+    indices = torch.tensor(np.vstack([A_coo.row, A_coo.col]), dtype=torch.long)
+    values = torch.tensor(A_coo.data, dtype=torch.float32)
+    W = torch.sparse_coo_tensor(indices, values, tuple(A.shape), dtype=torch.float32)
+    if device is not None:
+        W = W.to(device)
+
+    # Degree vector and total edge weight
+    k_np = np.array(A.sum(axis=1)).flatten().astype(np.float32)
+    k = torch.tensor(k_np, dtype=torch.float32, device=device)
+    two_m = float(k.sum().item())
+
+    logger.info(
+        f"sc KNN graph built: {A.shape[0]} cells, {n_neighbors} neighbors, "
+        f"2m={two_m:.0f}, PCA={n_components} dims"
+    )
+    return W, k, two_m
+
+
+def compute_leiden_overclustering(
+    adata_sc,
+    leiden_resolution: float = 2.0,
+    device=None,
+) -> tuple[torch.Tensor, int]:
+    """
+    Run a fine Leiden over-clustering on the sc data (once, before training).
+    Returns integer cluster labels per cell and the total number of clusters L.
+
+    The resolution should be tuned so that L ≈ 3*K (three times the number of
+    cell states K). Check the logged output to verify.
+
+    Args:
+        adata_sc          : raw AnnData object for scRNA-seq (not modified)
+        leiden_resolution : Leiden resolution — higher = more clusters
+        device            : torch device for the output label tensor
+
+    Returns:
+        leiden_labels : integer tensor (C,) with values in [0, L)
+        L             : number of Leiden clusters found
+    """
+    import scanpy as sc
+
+    adata = adata_sc.copy()
+    n_comps = min(50, adata.n_obs - 1, adata.n_vars - 1)
+    sc.pp.pca(adata, n_comps=n_comps)
+    sc.pp.neighbors(adata, n_neighbors=15, use_rep="X_pca")
+    sc.tl.leiden(adata, resolution=leiden_resolution, key_added="_leiden_overclust")
+
+    labels_np = adata.obs["_leiden_overclust"].astype(int).values
+    L = int(labels_np.max()) + 1
+    leiden_labels = torch.tensor(labels_np, dtype=torch.long, device=device)
+
+    logger.info(
+        f"Leiden over-clustering: resolution={leiden_resolution}, L={L} clusters"
+    )
+    return leiden_labels, L
 
 
 def fmt_nonzero_4(x: float) -> str:
@@ -66,6 +164,8 @@ def dump_loss_logs(losses, config_path) -> dict:
         "clust",
         "state_entropy",
         "spot_entropy",
+        "soft_modularity",
+        "soft_contingency",
     ):
         comp_vals = losses.get(comp, {})
         val = None
@@ -153,6 +253,24 @@ def create_loss_plots(losses, loss_dir):
         ),
         label="spot_entropy-weighted",
     )
+    if "soft_modularity" in losses:
+        plt.plot(
+            epochs,
+            list(
+                v * losses["soft_modularity"]["weight"]
+                for v in losses["soft_modularity"]["values"]
+            ),
+            label="soft_modularity-weighted",
+        )
+    if "soft_contingency" in losses:
+        plt.plot(
+            epochs,
+            list(
+                v * losses["soft_contingency"]["weight"]
+                for v in losses["soft_contingency"]["values"]
+            ),
+            label="soft_contingency-weighted",
+        )
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.title("Loss Curve (components + total)")
@@ -173,6 +291,8 @@ def create_loss_plots(losses, loss_dir):
         *(("clust",) if "clust" in losses else ()),
         "state_entropy",
         "spot_entropy",
+        *(("soft_modularity",) if "soft_modularity" in losses else ()),
+        *(("soft_contingency",) if "soft_contingency" in losses else ()),
     )
 
     # Ensure epochs list is available

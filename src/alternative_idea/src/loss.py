@@ -15,11 +15,18 @@ class AlternativeIdeaLoss(nn.Module):
         lambda_clust: float = 1.0,
         lambda_state_entropy: float = 1.0,
         lambda_spot_entropy: float = 1.0,
+        lambda_soft_modularity: float = 0.0,
         eps: float = 1e-8,
         normalize_by_initial: bool = True,
         warmup_iters: int = 1,
         k: int = 20,
         use_cm: bool = False,
+        knn_W: Tensor | None = None,
+        knn_k: Tensor | None = None,
+        knn_two_m: float = 1.0,
+        lambda_soft_contingency: float = 0.0,
+        leiden_labels: Tensor | None = None,
+        leiden_n_clusters: int = 0,
     ):
         super(AlternativeIdeaLoss, self).__init__()
         self.lambda_rec_spot = lambda_rec_spot
@@ -28,8 +35,17 @@ class AlternativeIdeaLoss(nn.Module):
         self.lambda_clust = lambda_clust
         self.lambda_state_entropy = lambda_state_entropy
         self.lambda_spot_entropy = lambda_spot_entropy
+        self.lambda_soft_modularity = lambda_soft_modularity
         self.eps = eps
         self.lnK = torch.log(torch.tensor(k, dtype=torch.float32))
+        # KNN graph components for soft modularity (precomputed, fixed during training)
+        self.knn_W = knn_W  # sparse (C x C) or None
+        self.knn_k = knn_k  # dense  (C,)    or None
+        self.knn_two_m = knn_two_m  # scalar float
+        # Leiden over-clustering components for soft contingency (precomputed, fixed)
+        self.lambda_soft_contingency = lambda_soft_contingency
+        self.leiden_labels = leiden_labels  # integer (C,) or None
+        self.leiden_n_clusters = leiden_n_clusters  # scalar int
 
         # Normalization / baseline settings for rec_state and clust
         self.normalize_by_initial = bool(normalize_by_initial)
@@ -254,6 +270,67 @@ class AlternativeIdeaLoss(nn.Module):
         # 3. Return the mean across all spots multiplied by lambda
         return torch.mean(spot_entropies)
 
+    def get_soft_modularity_loss(self, B: Tensor) -> Tensor:
+        """
+        Differentiable soft modularity on the precomputed sc KNN graph.
+
+        Replaces the hard cluster-indicator delta(c_i, c_j) with the dot product
+        of soft assignment rows B[i,:] · B[j,:], making the whole expression
+        differentiable through B.
+
+        Q_soft = Tr(B^T @ (W - k*k^T / 2m) @ B) / 2m
+        loss   = -Q_soft   (we minimise, so negate modularity)
+
+        Args:
+            B: Cell-to-state assignment matrix (C x K), rows are soft assignments.
+        """
+        # W @ B: sparse-dense matmul → (C x K)
+        WB = torch.sparse.mm(self.knn_W, B)
+        # Tr(B^T W B) = sum of element-wise product of B and WB
+        trace_WB = torch.sum(B * WB)
+        # k^T B → (K,);  Tr(B^T k k^T/2m B) = ||k^T B||^2 / 2m
+        assert self.knn_k is not None
+        kB = self.knn_k @ B
+        trace_null = torch.dot(kB, kB) / self.knn_two_m
+        Q_soft = (trace_WB - trace_null) / self.knn_two_m
+        return -Q_soft
+
+    def get_soft_contingency_loss(self, B: Tensor) -> Tensor:
+        """
+        Cluster-size-weighted entropy of the soft contingency matrix.
+
+        T[l, k] = sum_{c in Leiden cluster l} B[c, k]
+        For each Leiden cluster l, T[l,:] (row-normalised) should concentrate
+        on one state k. We minimise the cluster-size-weighted row entropy.
+        Entropy is normalised by log(K) so the value lies in [0, 1].
+
+        Args:
+            B: Cell-to-state assignment matrix (C x K).
+        """
+        K = B.shape[1]
+        L = self.leiden_n_clusters
+
+        # Soft contingency matrix (L x K) via scatter_add — no one-hot matrix needed
+        T = torch.zeros(L, K, device=B.device)
+        assert self.leiden_labels is not None
+        idx = self.leiden_labels.to(B.device).unsqueeze(1).expand(-1, K)  # (C x K)
+        T.scatter_add_(0, idx, B)
+
+        # Cluster sizes: B rows sum to 1, so T[l,:].sum() = n_cells in cluster l
+        sizes = T.sum(dim=1)  # (L,)
+        weights = sizes / (
+            sizes.sum() + self.eps
+        )  # (L,) normalised cluster-size weights
+
+        # Row-normalise T → state probability distribution per Leiden cluster
+        T_norm = T / (sizes.unsqueeze(1) + self.eps)  # (L x K)
+
+        # Per-row entropy, normalised by log(K) → range [0, 1]
+        H = -(T_norm * torch.log(T_norm + self.eps)).sum(dim=1)  # (L,)
+        H = H / torch.log(torch.tensor(K, dtype=torch.float32, device=B.device))
+
+        return (weights * H).sum()
+
     def forward(
         self,
         A: Tensor,
@@ -283,6 +360,17 @@ class AlternativeIdeaLoss(nn.Module):
         l_clust = self.get_clust_loss(A, h, B, F)
         l_state_entropy = self.get_state_entropy_loss(B)
         l_spot_entropy = self.get_spot_entropy_loss(A, B)
+        l_soft_modularity = (
+            self.get_soft_modularity_loss(B)
+            if self.lambda_soft_modularity > 0.0 and self.knn_W is not None
+            else B.sum()
+            * 0.0  # differentiable zero — keeps grad_fn for the analysis loop
+        )
+        l_soft_contingency = (
+            self.get_soft_contingency_loss(B)
+            if self.lambda_soft_contingency > 0.0 and self.leiden_labels is not None
+            else B.sum() * 0.0
+        )
 
         # 2. Optionally normalize rec_state and clust by their initial baseline
         # We use a warmup period: collect raw values for `warmup_iters` forwards
@@ -341,6 +429,8 @@ class AlternativeIdeaLoss(nn.Module):
             + self.lambda_clust * l_clust_norm
             + self.lambda_state_entropy * l_state_entropy
             + self.lambda_spot_entropy * l_spot_entropy
+            + self.lambda_soft_modularity * l_soft_modularity
+            + self.lambda_soft_contingency * l_soft_contingency
         )
 
         # Return both the weighted normalized components (for training/plotting) and the raw-weighted ones (for debug)
@@ -352,6 +442,8 @@ class AlternativeIdeaLoss(nn.Module):
             "clust": l_clust_norm,
             "state_entropy": l_state_entropy,
             "spot_entropy": l_spot_entropy,
+            "soft_modularity": l_soft_modularity,
+            "soft_contingency": l_soft_contingency,
         }
 
 
@@ -362,18 +454,34 @@ class AlternativeIdeaLossNoLocality(nn.Module):
         lambda_rec_gene: float = 0.0,
         lambda_state_entropy: float = 1.0,
         lambda_spot_entropy: float = 1.0,
+        lambda_soft_modularity: float = 0.0,
         eps: float = 1e-8,
         k: int = 20,
         use_cm: bool = False,
+        knn_W: Tensor | None = None,
+        knn_k: Tensor | None = None,
+        knn_two_m: float = 1.0,
+        lambda_soft_contingency: float = 0.0,
+        leiden_labels: Tensor | None = None,
+        leiden_n_clusters: int = 0,
     ):
         super(AlternativeIdeaLossNoLocality, self).__init__()
         self.lambda_rec_spot = lambda_rec_spot
         self.lambda_rec_gene = lambda_rec_gene
         self.lambda_state_entropy = lambda_state_entropy
         self.lambda_spot_entropy = lambda_spot_entropy
+        self.lambda_soft_modularity = lambda_soft_modularity
         self.eps = eps
         self.lnK = torch.log(torch.tensor(k, dtype=torch.float32))
         self.use_cm = use_cm
+        # KNN graph components for soft modularity (precomputed, fixed during training)
+        self.knn_W = knn_W  # sparse (C x C) or None
+        self.knn_k = knn_k  # dense  (C,)    or None
+        self.knn_two_m = knn_two_m  # scalar float
+        # Leiden over-clustering components for soft contingency (precomputed, fixed)
+        self.lambda_soft_contingency = lambda_soft_contingency
+        self.leiden_labels = leiden_labels  # integer (C,) or None
+        self.leiden_n_clusters = leiden_n_clusters  # scalar int
         logger.debug("AlternativeIdeaLossNoLocality initialized")
 
     def get_rec_spot_loss(
@@ -516,6 +624,67 @@ class AlternativeIdeaLossNoLocality(nn.Module):
         # 3. Return the mean across all spots multiplied by lambda
         return torch.mean(spot_entropies)
 
+    def get_soft_modularity_loss(self, B: Tensor) -> Tensor:
+        """
+        Differentiable soft modularity on the precomputed sc KNN graph.
+
+        Replaces the hard cluster-indicator delta(c_i, c_j) with the dot product
+        of soft assignment rows B[i,:] · B[j,:], making the whole expression
+        differentiable through B.
+
+        Q_soft = Tr(B^T @ (W - k*k^T / 2m) @ B) / 2m
+        loss   = -Q_soft   (we minimise, so negate modularity)
+
+        Args:
+            B: Cell-to-state assignment matrix (C x K), rows are soft assignments.
+        """
+        # W @ B: sparse-dense matmul → (C x K)
+        WB = torch.sparse.mm(self.knn_W, B)
+        # Tr(B^T W B) = sum of element-wise product of B and WB
+        trace_WB = torch.sum(B * WB)
+        # k^T B → (K,);  Tr(B^T k k^T/2m B) = ||k^T B||^2 / 2m
+        assert self.knn_k is not None
+        kB = self.knn_k @ B
+        trace_null = torch.dot(kB, kB) / self.knn_two_m
+        Q_soft = (trace_WB - trace_null) / self.knn_two_m
+        return -Q_soft
+
+    def get_soft_contingency_loss(self, B: Tensor) -> Tensor:
+        """
+        Cluster-size-weighted entropy of the soft contingency matrix.
+
+        T[l, k] = sum_{c in Leiden cluster l} B[c, k]
+        For each Leiden cluster l, T[l,:] (row-normalised) should concentrate
+        on one state k. We minimise the cluster-size-weighted row entropy.
+        Entropy is normalised by log(K) so the value lies in [0, 1].
+
+        Args:
+            B: Cell-to-state assignment matrix (C x K).
+        """
+        K = B.shape[1]
+        L = self.leiden_n_clusters
+
+        # Soft contingency matrix (L x K) via scatter_add — no one-hot matrix needed
+        T = torch.zeros(L, K, device=B.device)
+        assert self.leiden_labels is not None
+        idx = self.leiden_labels.to(B.device).unsqueeze(1).expand(-1, K)  # (C x K)
+        T.scatter_add_(0, idx, B)
+
+        # Cluster sizes: B rows sum to 1, so T[l,:].sum() = n_cells in cluster l
+        sizes = T.sum(dim=1)  # (L,)
+        weights = sizes / (
+            sizes.sum() + self.eps
+        )  # (L,) normalised cluster-size weights
+
+        # Row-normalise T → state probability distribution per Leiden cluster
+        T_norm = T / (sizes.unsqueeze(1) + self.eps)  # (L x K)
+
+        # Per-row entropy, normalised by log(K) → range [0, 1]
+        H = -(T_norm * torch.log(T_norm + self.eps)).sum(dim=1)  # (L,)
+        H = H / torch.log(torch.tensor(K, dtype=torch.float32, device=B.device))
+
+        return (weights * H).sum()
+
     def forward(
         self,
         A: Tensor,
@@ -535,25 +704,39 @@ class AlternativeIdeaLossNoLocality(nn.Module):
         l_rec_gene = self.get_rec_gene_loss(A, B, X_shared, Z_shared)
         l_state_entropy = self.get_state_entropy_loss(B)
         l_spot_entropy = self.get_spot_entropy_loss(A, B)
+        l_soft_modularity = (
+            self.get_soft_modularity_loss(B)
+            if self.lambda_soft_modularity > 0.0 and self.knn_W is not None
+            else B.sum()
+            * 0.0  # differentiable zero — keeps grad_fn for the analysis loop
+        )
+        l_soft_contingency = (
+            self.get_soft_contingency_loss(B)
+            if self.lambda_soft_contingency > 0.0 and self.leiden_labels is not None
+            else B.sum() * 0.0
+        )
 
-        # 3. Normalize l_state_entropy and l_spot_entropy by their maximum possible values to keep them in a comparable range
+        # Normalize l_state_entropy and l_spot_entropy by their maximum possible values to keep them in a comparable range
         # Max entropy for both is log(K)
         l_state_entropy /= self.lnK
         l_spot_entropy /= self.lnK
 
-        # 3. Weighted total (use normalized versions for rec_state and clust when available)
+        # Weighted total
         total_loss = (
             self.lambda_rec_spot * l_rec_spot
             + self.lambda_rec_gene * l_rec_gene
             + self.lambda_state_entropy * l_state_entropy
             + self.lambda_spot_entropy * l_spot_entropy
+            + self.lambda_soft_modularity * l_soft_modularity
+            + self.lambda_soft_contingency * l_soft_contingency
         )
 
-        # Return both the weighted normalized components (for training/plotting) and the raw-weighted ones (for debug)
         return {
             "loss": total_loss,
             "rec_spot": l_rec_spot,
             "rec_gene": l_rec_gene,
             "state_entropy": l_state_entropy,
             "spot_entropy": l_spot_entropy,
+            "soft_modularity": l_soft_modularity,
+            "soft_contingency": l_soft_contingency,
         }

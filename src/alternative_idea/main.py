@@ -20,6 +20,8 @@ from .src.utils import (
     fmt_nonzero_4,
     create_loss_plots,
     dump_loss_logs,
+    build_sc_knn_graph,
+    compute_leiden_overclustering,
 )
 from .src.model import AlternativeIdeaModel, AlternativeIdeaModelNoLocality
 from .src.loss import AlternativeIdeaLoss, AlternativeIdeaLossNoLocality
@@ -213,6 +215,17 @@ def alternative_idea_compute_mapping(
             "Skipping normalize_and_log as per config (training.normalize_and_log=false)"
         )
 
+    # 3b. Leiden over-clustering for soft contingency loss (once, before training)
+    # Must happen before prepare_tensors_from_input so adata_sc is still available
+    leiden_labels, leiden_n_clusters = None, 0
+    if loss_weights.get("lambda_soft_contingency", 0.0) > 0.0:
+        leiden_resolution = training_config.get("leiden_resolution_overclustering", 2.0)
+        logger.info("Computing Leiden over-clustering for soft contingency loss...")
+        leiden_labels, leiden_n_clusters = compute_leiden_overclustering(
+            adata_sc, leiden_resolution=leiden_resolution, device=device
+        )
+        logger.info(f"Computed {leiden_n_clusters} clusters.")
+
     # 4. Convert input anndata to tensors
     logger.debug("Prepare input tensors for model...")
     X, Z, X_shared, Z_shared = prepare_tensors_from_input(adata_sc, adata_st, device)
@@ -296,6 +309,15 @@ def alternative_idea_compute_mapping(
         ).to(device)
 
     # 7. Initialize Loss and Optimizer
+
+    # Precompute sc KNN graph for soft modularity loss (once, before training starts)
+    knn_W, knn_k, knn_two_m = None, None, 1.0
+    if loss_weights.get("lambda_soft_modularity", 0.0) > 0.0:
+        logger.info("Precomputing sc KNN graph for soft modularity loss...")
+        knn_W, knn_k, knn_two_m = build_sc_knn_graph(
+            X, n_pca_components=50, n_neighbors=15, device=device
+        )
+
     loss: AlternativeIdeaLoss | AlternativeIdeaLossNoLocality
     if use_slim_model:
         loss = AlternativeIdeaLossNoLocality(
@@ -303,8 +325,15 @@ def alternative_idea_compute_mapping(
             lambda_rec_gene=loss_weights["lambda_rec_gene"],
             lambda_state_entropy=loss_weights["lambda_state_entropy"],
             lambda_spot_entropy=loss_weights["lambda_spot_entropy"],
+            lambda_soft_modularity=loss_weights.get("lambda_soft_modularity", 0.0),
+            lambda_soft_contingency=loss_weights.get("lambda_soft_contingency", 0.0),
             k=model_config["K"],
             use_cm=bool(training_config["use_cm"]),
+            knn_W=knn_W,
+            knn_k=knn_k,
+            knn_two_m=knn_two_m,
+            leiden_labels=leiden_labels,
+            leiden_n_clusters=leiden_n_clusters,
         )
     else:
         loss = AlternativeIdeaLoss(
@@ -314,10 +343,17 @@ def alternative_idea_compute_mapping(
             lambda_clust=loss_weights["lambda_clust"],
             lambda_state_entropy=loss_weights["lambda_state_entropy"],
             lambda_spot_entropy=loss_weights["lambda_spot_entropy"],
+            lambda_soft_modularity=loss_weights.get("lambda_soft_modularity", 0.0),
+            lambda_soft_contingency=loss_weights.get("lambda_soft_contingency", 0.0),
             normalize_by_initial=True,
             warmup_iters=1,
             k=model_config["K"],
             use_cm=bool(training_config["use_cm"]),
+            knn_W=knn_W,
+            knn_k=knn_k,
+            knn_two_m=knn_two_m,
+            leiden_labels=leiden_labels,
+            leiden_n_clusters=leiden_n_clusters,
         )
 
     optimizer = optim.Adam(model.parameters(), lr=training_config["lr"])
@@ -350,6 +386,26 @@ def alternative_idea_compute_mapping(
             "weight": loss_weights["lambda_spot_entropy"],
             "values": list(),
         },
+        **(
+            {
+                "soft_modularity": {
+                    "weight": loss_weights.get("lambda_soft_modularity", 0.0),
+                    "values": list(),
+                }
+            }
+            if loss_weights.get("lambda_soft_modularity", 0.0) > 0.0
+            else {}
+        ),
+        **(
+            {
+                "soft_contingency": {
+                    "weight": loss_weights.get("lambda_soft_contingency", 0.0),
+                    "values": list(),
+                }
+            }
+            if loss_weights.get("lambda_soft_contingency", 0.0) > 0.0
+            else {}
+        ),
     }
 
     def to_scalar(t):
@@ -427,6 +483,14 @@ def alternative_idea_compute_mapping(
         losses["spot_entropy"]["values"].append(
             to_scalar(loss_dict.get("spot_entropy"))
         )
+        if loss_weights.get("lambda_soft_modularity", 0.0) > 0.0:
+            losses["soft_modularity"]["values"].append(
+                to_scalar(loss_dict.get("soft_modularity"))
+            )
+        if loss_weights.get("lambda_soft_contingency", 0.0) > 0.0:
+            losses["soft_contingency"]["values"].append(
+                to_scalar(loss_dict.get("soft_contingency"))
+            )
 
         # Logging: verbose -> log every epoch at DEBUG, normal -> log every 10 epochs at INFO
         if verbose_logging:

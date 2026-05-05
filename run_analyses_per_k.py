@@ -203,6 +203,8 @@ def main(
         )
 
         row: dict = {"run": run_dir.name, "K": K}
+        row["Computed states"] = results["n_computed_states"]
+        row["Mapped states"] = results["n_mapped_states"]
         for metric, value in results["metrics_computed"].items():
             row[f"{metric}__computed"] = value
         row["hungarian_cosim"] = results["centroid_matching"]["hungarian_score"]

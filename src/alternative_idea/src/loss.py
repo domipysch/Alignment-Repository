@@ -6,13 +6,34 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def compute_state_centroids(B: Tensor, Y: Tensor, eps: float = 1e-8) -> Tensor:
+    """
+    Compute soft cell-state centroids in embedding space.
+
+    S[k] = weighted mean of Y over cells assigned to state k,
+    i.e. S = (B / colsum(B))^T @ Y.
+
+    Args:
+        B: (C x K) cell-to-state soft assignment matrix.
+        Y: (C x d) cell embeddings (precomputed, fixed).
+        eps: Stability term to avoid division by zero for empty states.
+
+    Returns:
+        S: (K x d) state centroids in embedding space.
+    """
+    B_norm = B / (B.sum(dim=0, keepdim=True) + eps)  # (C x K), columns sum to 1
+    return B_norm.T @ Y  # (K x d)
+
+
 class AlternativeIdeaLoss(nn.Module):
     def __init__(
         self,
         lambda_rec_spot: float = 1.0,
         lambda_rec_gene: float = 0.0,
-        lambda_rec_state: float = 1.0,
-        lambda_clust: float = 1.0,
+        lambda_legacy_rec_state: float = 1.0,
+        lambda_legacy_clust: float = 1.0,
+        lambda_clust_intra: float = 0.0,
+        lambda_clust_inter: float = 0.0,
         lambda_state_entropy: float = 1.0,
         lambda_spot_entropy: float = 1.0,
         eps: float = 1e-8,
@@ -24,8 +45,10 @@ class AlternativeIdeaLoss(nn.Module):
         super(AlternativeIdeaLoss, self).__init__()
         self.lambda_rec_spot = lambda_rec_spot
         self.lambda_rec_gene = lambda_rec_gene
-        self.lambda_rec_state = lambda_rec_state
-        self.lambda_clust = lambda_clust
+        self.lambda_legacy_rec_state = lambda_legacy_rec_state
+        self.lambda_legacy_clust = lambda_legacy_clust
+        self.lambda_clust_intra = lambda_clust_intra
+        self.lambda_clust_inter = lambda_clust_inter
         self.lambda_state_entropy = lambda_state_entropy
         self.lambda_spot_entropy = lambda_spot_entropy
         self.eps = eps
@@ -37,14 +60,14 @@ class AlternativeIdeaLoss(nn.Module):
 
         # Buffers to hold baseline statistics (registered buffers move with module)
         # Initialize with NaN to indicate not-yet-set
-        self.register_buffer("_init_rec_state", torch.tensor(float("nan")))
-        self.register_buffer("_init_clust", torch.tensor(float("nan")))
+        self.register_buffer("_legacy_init_rec_state", torch.tensor(float("nan")))
+        self.register_buffer("_legacy_init_clust", torch.tensor(float("nan")))
 
         self.use_cm = use_cm
 
         # Accumulators used during warmup to compute the baseline averages
-        self._acc_rec_state = 0.0
-        self._acc_clust = 0.0
+        self._legacy_acc_rec_state = 0.0
+        self._legacy_acc_clust = 0.0
         self._forward_count = 0
         logger.debug("AlternativeIdeaLoss initialized")
 
@@ -147,7 +170,7 @@ class AlternativeIdeaLoss(nn.Module):
         loss_per_gene = torch.clamp(1.0 - cosine_sim, min=0.0)
         return torch.mean(loss_per_gene)
 
-    def get_rec_state_loss(
+    def _legacy_get_rec_state_loss(
         self, M_reconstructed: Tensor, A: Tensor, B: Tensor, X_sc: Tensor
     ) -> Tensor:
         """
@@ -187,7 +210,9 @@ class AlternativeIdeaLoss(nn.Module):
 
         return weighted_loss
 
-    def get_clust_loss(self, A: Tensor, h: Tensor, B: Tensor, F: Tensor) -> Tensor:
+    def _legacy_get_clust_loss(
+        self, A: Tensor, h: Tensor, B: Tensor, F: Tensor
+    ) -> Tensor:
         """
         Eq (11): Cell clustering loss in embedding space.
 
@@ -254,6 +279,41 @@ class AlternativeIdeaLoss(nn.Module):
         # 3. Return the mean across all spots multiplied by lambda
         return torch.mean(spot_entropies)
 
+    def get_clust_intra_loss(self, B: Tensor, Y: Tensor) -> Tensor:
+        """
+        Soft within-cluster variance in embedding space.
+
+        L = |C|^{-1} sum_c sum_k B[c,k] * ||Y[c] - S[k]||^2
+
+        Args:
+            B: (C x K) cell-to-state soft assignment matrix.
+            Y: (C x d) precomputed cell embeddings.
+        """
+        S = compute_state_centroids(B, Y, self.eps)  # (K x d)
+        diff = Y.unsqueeze(1) - S.unsqueeze(0)  # (C x K x d)
+        sq_dist = (diff**2).sum(dim=2)  # (C x K)
+        return (B * sq_dist).sum() / B.shape[0]
+        # return (B * sq_dist).sum() / (B.shape[0] * Y.shape[1])
+
+    def get_clust_inter_loss(self, B: Tensor, Y: Tensor) -> Tensor:
+        """
+        Mean pairwise squared distance between cell-state centroids, negated.
+
+        L = -1/(K*(K-1)) * sum_{k != k'} ||S_k - S_k'||^2
+
+        Args:
+            B: (C x K) cell-to-state soft assignment matrix.
+            Y: (C x d) precomputed cell embeddings.
+        """
+        S = compute_state_centroids(B, Y, self.eps)  # (K x d)
+        K = S.shape[0]
+        if K < 2:
+            return torch.tensor(0.0, device=S.device)
+        diff = S.unsqueeze(1) - S.unsqueeze(0)  # (K x K x d)
+        sq_dist = (diff**2).sum(dim=2)  # (K x K)
+        mask = 1.0 - torch.eye(K, device=S.device, dtype=S.dtype)
+        return -(sq_dist * mask).sum() / (K * (K - 1))
+
     def forward(
         self,
         A: Tensor,
@@ -264,6 +324,7 @@ class AlternativeIdeaLoss(nn.Module):
         X: Tensor,
         X_shared: Tensor,
         Z_shared: Tensor,
+        Y: Tensor,
     ) -> dict[str, Tensor]:
         """
         Args:
@@ -275,12 +336,15 @@ class AlternativeIdeaLoss(nn.Module):
             X: Full scRNA-seq ref (C x g_sc)
             X_shared: scRNA-seq ref on shared genes (C x g_shared)
             Z_shared: Spatial data on shared genes (S x g_shared)
+            Y: Precomputed cell embeddings (C x d)
         """
         # 1. Individual terms (unweighted)
         l_rec_spot = self.get_rec_spot_loss(A, B, X_shared, Z_shared)
         l_rec_gene = self.get_rec_gene_loss(A, B, X_shared, Z_shared)
-        l_rec_state = self.get_rec_state_loss(M_rec, A, B, X)
-        l_clust = self.get_clust_loss(A, h, B, F)
+        l_rec_state = self._legacy_get_rec_state_loss(M_rec, A, B, X)
+        l_clust = self._legacy_get_clust_loss(A, h, B, F)
+        l_clust_intra = self.get_clust_intra_loss(B, Y)
+        l_clust_inter = self.get_clust_inter_loss(B, Y)
         l_state_entropy = self.get_state_entropy_loss(B)
         l_spot_entropy = self.get_spot_entropy_loss(A, B)
 
@@ -300,32 +364,37 @@ class AlternativeIdeaLoss(nn.Module):
                 raw_cl = float(l_clust.detach().cpu().numpy())
 
             if self._forward_count < self.warmup_iters:
-                self._acc_rec_state += raw_rs
-                self._acc_clust += raw_cl
+                self._legacy_acc_rec_state += raw_rs
+                self._legacy_acc_clust += raw_cl
 
             self._forward_count += 1
 
             # If warmup just finished, set initial baselines as the average across warmup
             if self._forward_count == self.warmup_iters:
                 init_rs = max(
-                    self._acc_rec_state / float(self.warmup_iters), float(self.eps)
+                    self._legacy_acc_rec_state / float(self.warmup_iters),
+                    float(self.eps),
                 )
                 init_cl = max(
-                    self._acc_clust / float(self.warmup_iters), float(self.eps)
+                    self._legacy_acc_clust / float(self.warmup_iters), float(self.eps)
                 )
                 # store as tensors on the module (register_buffer created them)
-                self._init_rec_state = torch.tensor(init_rs, device=l_rec_state.device)
-                self._init_clust = torch.tensor(init_cl, device=l_clust.device)
+                self._legacy_init_rec_state = torch.tensor(
+                    init_rs, device=l_rec_state.device
+                )
+                self._legacy_init_clust = torch.tensor(init_cl, device=l_clust.device)
                 logger.info(
                     f"Loss baselines set: init_rec_state={init_rs:.6g}, init_clust={init_cl:.6g}"
                 )
 
             # If baselines are available (not NaN), divide by baseline
-            if not torch.isnan(self._init_rec_state):
-                denom_rs = (self._init_rec_state + self.eps).to(l_rec_state.device)
+            if not torch.isnan(self._legacy_init_rec_state):
+                denom_rs = (self._legacy_init_rec_state + self.eps).to(
+                    l_rec_state.device
+                )
                 l_rec_state_norm = l_rec_state / denom_rs
-            if not torch.isnan(self._init_clust):
-                denom_cl = (self._init_clust + self.eps).to(l_clust.device)
+            if not torch.isnan(self._legacy_init_clust):
+                denom_cl = (self._legacy_init_clust + self.eps).to(l_clust.device)
                 l_clust_norm = l_clust / denom_cl
 
         # 3. Normalize l_state_entropy and l_spot_entropy by their maximum possible values to keep them in a comparable range
@@ -333,23 +402,26 @@ class AlternativeIdeaLoss(nn.Module):
         l_state_entropy /= self.lnK
         l_spot_entropy /= self.lnK
 
-        # 3. Weighted total (use normalized versions for rec_state and clust when available)
+        # 4. Weighted total
         total_loss = (
             self.lambda_rec_spot * l_rec_spot
             + self.lambda_rec_gene * l_rec_gene
-            + self.lambda_rec_state * l_rec_state_norm
-            + self.lambda_clust * l_clust_norm
+            + self.lambda_legacy_rec_state * l_rec_state_norm
+            + self.lambda_legacy_clust * l_clust_norm
+            + self.lambda_clust_intra * l_clust_intra
+            + self.lambda_clust_inter * l_clust_inter
             + self.lambda_state_entropy * l_state_entropy
             + self.lambda_spot_entropy * l_spot_entropy
         )
 
-        # Return both the weighted normalized components (for training/plotting) and the raw-weighted ones (for debug)
         return {
             "loss": total_loss,
             "rec_spot": l_rec_spot,
             "rec_gene": l_rec_gene,
-            "rec_state": l_rec_state_norm,
-            "clust": l_clust_norm,
+            "legacy_rec_state": l_rec_state_norm,
+            "legacy_clust": l_clust_norm,
+            "clust_intra": l_clust_intra,
+            "clust_inter": l_clust_inter,
             "state_entropy": l_state_entropy,
             "spot_entropy": l_spot_entropy,
         }
@@ -360,6 +432,8 @@ class AlternativeIdeaLossNoLocality(nn.Module):
         self,
         lambda_rec_spot: float = 1.0,
         lambda_rec_gene: float = 0.0,
+        lambda_clust_intra: float = 0.0,
+        lambda_clust_inter: float = 0.0,
         lambda_state_entropy: float = 1.0,
         lambda_spot_entropy: float = 1.0,
         eps: float = 1e-8,
@@ -369,6 +443,8 @@ class AlternativeIdeaLossNoLocality(nn.Module):
         super(AlternativeIdeaLossNoLocality, self).__init__()
         self.lambda_rec_spot = lambda_rec_spot
         self.lambda_rec_gene = lambda_rec_gene
+        self.lambda_clust_intra = lambda_clust_intra
+        self.lambda_clust_inter = lambda_clust_inter
         self.lambda_state_entropy = lambda_state_entropy
         self.lambda_spot_entropy = lambda_spot_entropy
         self.eps = eps
@@ -516,12 +592,47 @@ class AlternativeIdeaLossNoLocality(nn.Module):
         # 3. Return the mean across all spots multiplied by lambda
         return torch.mean(spot_entropies)
 
+    def get_clust_intra_loss(self, B: Tensor, Y: Tensor) -> Tensor:
+        """
+        Soft within-cluster variance in embedding space.
+
+        L = |C|^{-1} sum_c sum_k B[c,k] * ||Y[c] - S[k]||^2
+
+        Args:
+            B: (C x K) cell-to-state soft assignment matrix.
+            Y: (C x d) precomputed cell embeddings.
+        """
+        S = compute_state_centroids(B, Y, self.eps)  # (K x d)
+        diff = Y.unsqueeze(1) - S.unsqueeze(0)  # (C x K x d)
+        sq_dist = (diff**2).sum(dim=2)  # (C x K)
+        return (B * sq_dist).sum() / (B.shape[0] * Y.shape[1])
+
+    def get_clust_inter_loss(self, B: Tensor, Y: Tensor) -> Tensor:
+        """
+        Mean pairwise squared distance between cell-state centroids, negated.
+
+        L = -1/(K*(K-1)) * sum_{k != k'} ||S_k - S_k'||^2
+
+        Args:
+            B: (C x K) cell-to-state soft assignment matrix.
+            Y: (C x d) precomputed cell embeddings.
+        """
+        S = compute_state_centroids(B, Y, self.eps)  # (K x d)
+        K = S.shape[0]
+        if K < 2:
+            return torch.tensor(0.0, device=S.device)
+        diff = S.unsqueeze(1) - S.unsqueeze(0)  # (K x K x d)
+        sq_dist = (diff**2).sum(dim=2)  # (K x K)
+        mask = 1.0 - torch.eye(K, device=S.device, dtype=S.dtype)
+        return -(sq_dist * mask).sum() / (K * (K - 1))
+
     def forward(
         self,
         A: Tensor,
         B: Tensor,
         X_shared: Tensor,
         Z_shared: Tensor,
+        Y: Tensor,
     ) -> dict[str, Tensor]:
         """
         Args:
@@ -529,31 +640,36 @@ class AlternativeIdeaLossNoLocality(nn.Module):
             B: Cell to cell state mapping (C x K)
             X_shared: scRNA-seq ref on shared genes (C x g_shared)
             Z_shared: Spatial data on shared genes (S x g_shared)
+            Y: Precomputed cell embeddings (C x d)
         """
         # 1. Individual terms (unweighted)
         l_rec_spot = self.get_rec_spot_loss(A, B, X_shared, Z_shared)
         l_rec_gene = self.get_rec_gene_loss(A, B, X_shared, Z_shared)
+        l_clust_intra = self.get_clust_intra_loss(B, Y)
+        l_clust_inter = self.get_clust_inter_loss(B, Y)
         l_state_entropy = self.get_state_entropy_loss(B)
         l_spot_entropy = self.get_spot_entropy_loss(A, B)
 
-        # 3. Normalize l_state_entropy and l_spot_entropy by their maximum possible values to keep them in a comparable range
-        # Max entropy for both is log(K)
+        # 2. Normalize entropy terms by their maximum possible value log(K)
         l_state_entropy /= self.lnK
         l_spot_entropy /= self.lnK
 
-        # 3. Weighted total (use normalized versions for rec_state and clust when available)
+        # 3. Weighted total
         total_loss = (
             self.lambda_rec_spot * l_rec_spot
             + self.lambda_rec_gene * l_rec_gene
+            + self.lambda_clust_intra * l_clust_intra
+            + self.lambda_clust_inter * l_clust_inter
             + self.lambda_state_entropy * l_state_entropy
             + self.lambda_spot_entropy * l_spot_entropy
         )
 
-        # Return both the weighted normalized components (for training/plotting) and the raw-weighted ones (for debug)
         return {
             "loss": total_loss,
             "rec_spot": l_rec_spot,
             "rec_gene": l_rec_gene,
+            "clust_intra": l_clust_intra,
+            "clust_inter": l_clust_inter,
             "state_entropy": l_state_entropy,
             "spot_entropy": l_spot_entropy,
         }

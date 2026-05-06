@@ -62,8 +62,10 @@ def dump_loss_logs(losses, config_path) -> dict:
     for comp in (
         "rec_spot",
         "rec_gene",
-        "rec_state",
-        "clust",
+        "legacy_rec_state",
+        "legacy_clust",
+        "clust_intra",
+        "clust_inter",
         "state_entropy",
         "spot_entropy",
     ):
@@ -123,19 +125,41 @@ def create_loss_plots(losses, loss_dir):
         list(v * losses["rec_gene"]["weight"] for v in losses["rec_gene"]["values"]),
         label="rec_gene-weighted",
     )
-    if "rec_state" in losses:
+    if "legacy_rec_state" in losses:
         plt.plot(
             epochs,
             list(
-                v * losses["rec_state"]["weight"] for v in losses["rec_state"]["values"]
+                v * losses["legacy_rec_state"]["weight"]
+                for v in losses["legacy_rec_state"]["values"]
             ),
-            label="rec_state-weighted",
+            label="legacy_rec_state-weighted",
         )
-    if "clust" in losses:
+    if "legacy_clust" in losses:
         plt.plot(
             epochs,
-            list(v * losses["clust"]["weight"] for v in losses["clust"]["values"]),
-            label="clust-weighted",
+            list(
+                v * losses["legacy_clust"]["weight"]
+                for v in losses["legacy_clust"]["values"]
+            ),
+            label="legacy_clust-weighted",
+        )
+    if "clust_intra" in losses:
+        plt.plot(
+            epochs,
+            list(
+                v * losses["clust_intra"]["weight"]
+                for v in losses["clust_intra"]["values"]
+            ),
+            label="clust_intra-weighted",
+        )
+    if "clust_inter" in losses:
+        plt.plot(
+            epochs,
+            list(
+                v * losses["clust_inter"]["weight"]
+                for v in losses["clust_inter"]["values"]
+            ),
+            label="clust_inter-weighted",
         )
     plt.plot(
         epochs,
@@ -169,8 +193,10 @@ def create_loss_plots(losses, loss_dir):
     components = (
         "rec_spot",
         "rec_gene",
-        *(("rec_state",) if "rec_state" in losses else ()),
-        *(("clust",) if "clust" in losses else ()),
+        *(("legacy_rec_state",) if "legacy_rec_state" in losses else ()),
+        *(("legacy_clust",) if "legacy_clust" in losses else ()),
+        *(("clust_intra",) if "clust_intra" in losses else ()),
+        *(("clust_inter",) if "clust_inter" in losses else ()),
         "state_entropy",
         "spot_entropy",
     )

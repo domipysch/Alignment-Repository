@@ -35,10 +35,16 @@ training:
     - false
   use_cm:
     - true
+sc_embedding:
+  method: pca
+  d: 32
+  standardize: true
 loss_weights:
   - lambda_rec_spot: 1.0
     lambda_rec_gene: 0
-    lambda_rec_state: 0
-    lambda_clust: 0
+    lambda_legacy_rec_state: 0
+    lambda_legacy_clust: 0
+    lambda_clust_intra: 0
+    lambda_clust_inter: 0
     lambda_state_entropy: 0.01
     lambda_spot_entropy: 0.008

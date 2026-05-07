@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 from anndata import AnnData
 
-from ._utils import _dense_X
+from ..utils import _dense_X
 
 logger = logging.getLogger(__name__)
 

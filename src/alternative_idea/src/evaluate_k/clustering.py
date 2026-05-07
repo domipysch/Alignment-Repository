@@ -10,7 +10,7 @@ from anndata import AnnData
 from sklearn.metrics import silhouette_score
 from sklearn.metrics.pairwise import cosine_similarity
 
-from ._utils import _dense_X, _prepare_for_umap
+from ..utils import _dense_X, run_pca_neighbors_umap
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ def compute_all_metrics(
 
     Parameters
     ----------
-    adata_processed : AnnData prepared by _prepare_for_umap (has PCA + neighbors).
+    adata_processed : AnnData with PCA, neighbors, and UMAP already computed.
     labels          : Integer cluster assignment for each cell.
     """
     X = _dense_X(adata_processed)
@@ -117,7 +117,7 @@ def compute_all_metrics(
 def run_leiden_shared_genes(
     adata_processed: AnnData,
     shared_genes: list[str],
-    resolution: float = 0.5,
+    resolution: float,
 ) -> tuple[np.ndarray, AnnData]:
     """
     Standalone Leiden clustering using only the sc/st shared genes.
@@ -138,10 +138,7 @@ def run_leiden_shared_genes(
     logger.info("Leiden on shared genes: %d genes", len(available))
 
     adata_shared = adata_processed[:, available].copy()
-    n_comps = min(30, len(available) - 1)
-    sc.pp.pca(adata_shared, n_comps=n_comps)
-    sc.pp.neighbors(adata_shared, n_neighbors=15, use_rep="X_pca")
-    sc.tl.umap(adata_shared)
+    run_pca_neighbors_umap(adata_shared)
     sc.tl.leiden(adata_shared, resolution=resolution, key_added="_leiden_shared")
     labels = adata_shared.obs["_leiden_shared"].astype(int).values
     logger.info(
@@ -154,8 +151,7 @@ def run_leiden_shared_genes(
 
 def run_leiden_clustering(
     adata_sc: AnnData,
-    resolution: float = 0.5,
-    normalize: bool = True,
+    resolution: float,
 ) -> tuple[np.ndarray, AnnData]:
     """
     Standalone Leiden clustering on the sc data.
@@ -165,7 +161,8 @@ def run_leiden_clustering(
     labels          : Integer cluster labels, shape (n_cells,).
     adata_processed : Working copy of adata_sc with UMAP + Leiden stored.
     """
-    adata = _prepare_for_umap(adata_sc, normalize=normalize)
+    adata = adata_sc.copy()
+    run_pca_neighbors_umap(adata)
     sc.tl.leiden(adata, resolution=resolution, key_added="_leiden_ref")
     labels = adata.obs["_leiden_ref"].astype(int).values
     logger.info(

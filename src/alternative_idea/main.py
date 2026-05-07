@@ -13,21 +13,19 @@ import logging
 import numpy as np
 import scipy.sparse as sp
 from anndata import AnnData
-from ..utils.io import anndata_to_csv
+from ..utils.io import anndata_to_csv, load_sc_adata, load_st_adata
 from .src.utils import (
-    load_sc_adata,
-    load_st_adata,
     fmt_nonzero_4,
     create_loss_plots,
     dump_loss_logs,
     build_sc_knn_graph,
-    compute_leiden_overclustering,
 )
-from .src.model import AlternativeIdeaModel, AlternativeIdeaModelNoLocality
-from .src.loss import AlternativeIdeaLoss, AlternativeIdeaLossNoLocality
+from .src.model import AlternativeIdeaModelNoLocality
+from .src.loss import AlternativeIdeaLossNoLocality
 from .src.spatial_graph import build_spatial_graph, SpatialGraphType
 from .src.dataset import prepare_tensors_from_input
 from .src.utils import graph_type_from_config
+from .src.evaluate_k.clustering import run_leiden_clustering
 
 logger = logging.getLogger(__name__)
 
@@ -203,7 +201,21 @@ def alternative_idea_compute_mapping(
     logger.debug(f"Loaded loss weights: {loss_weights}")
     logger.info(f"Using device: {device}")
 
-    # (Optional) 3. Preprocess data (only for mapping): Normalize & Log-transform
+    # 3. Leiden over-clustering for soft contingency loss (once, before training)
+    # Must happen before prepare_tensors_from_input so adata_sc is still available
+    leiden_labels, leiden_n_clusters = None, 0
+    if loss_weights.get("lambda_soft_contingency", 0.0) > 0.0:
+        leiden_resolution = training_config.get(
+            "reference_leiden_clustering_resolution"
+        )
+        logger.info("Computing Leiden over-clustering for soft contingency loss...")
+        assert leiden_resolution is not None and type(leiden_resolution) == float
+        labels_np, _ = run_leiden_clustering(adata_sc, resolution=leiden_resolution)
+        leiden_n_clusters = int(labels_np.max()) + 1
+        leiden_labels = torch.tensor(labels_np, dtype=torch.long, device=device)
+        logger.info(f"Computed {leiden_n_clusters} clusters.")
+
+    # (Optional) Preprocess data (only for mapping): Normalize & Log-transform
     if training_config["normalize_and_log"]:
         logger.info("Normalize & Log-transform gene expression and spatial data")
         sc.pp.normalize_total(adata_sc)
@@ -214,17 +226,6 @@ def alternative_idea_compute_mapping(
         logger.info(
             "Skipping normalize_and_log as per config (training.normalize_and_log=false)"
         )
-
-    # 3b. Leiden over-clustering for soft contingency loss (once, before training)
-    # Must happen before prepare_tensors_from_input so adata_sc is still available
-    leiden_labels, leiden_n_clusters = None, 0
-    if loss_weights.get("lambda_soft_contingency", 0.0) > 0.0:
-        leiden_resolution = training_config.get("leiden_resolution_overclustering", 2.0)
-        logger.info("Computing Leiden over-clustering for soft contingency loss...")
-        leiden_labels, leiden_n_clusters = compute_leiden_overclustering(
-            adata_sc, leiden_resolution=leiden_resolution, device=device
-        )
-        logger.info(f"Computed {leiden_n_clusters} clusters.")
 
     # 4. Convert input anndata to tensors
     logger.debug("Prepare input tensors for model...")
@@ -286,7 +287,7 @@ def alternative_idea_compute_mapping(
         )
         sys.exit(1)
 
-    model: AlternativeIdeaModel | AlternativeIdeaModelNoLocality
+    model: AlternativeIdeaModelNoLocality
     if use_slim_model:
         # No spatial neighborhood information taken into account
         model = AlternativeIdeaModelNoLocality(
@@ -296,17 +297,7 @@ def alternative_idea_compute_mapping(
         ).to(device)
     else:
         # Use full model
-        model = AlternativeIdeaModel(
-            num_spots_st=num_spots,
-            num_cells_sc=num_cells,
-            g_st=g_st,
-            g_sc=g_sc,
-            d=model_config["d"],
-            k=model_config["K"],
-            enc_hidden_dim=model_config["enc_hidden_dim"],
-            dec_hidden_dim=model_config["dec_hidden_dim"],
-            dropout_rate_decoder=training_config["dropout_decoder"],
-        ).to(device)
+        raise Exception("not available")
 
     # 7. Initialize Loss and Optimizer
 
@@ -318,7 +309,7 @@ def alternative_idea_compute_mapping(
             X, n_pca_components=50, n_neighbors=15, device=device
         )
 
-    loss: AlternativeIdeaLoss | AlternativeIdeaLossNoLocality
+    loss: AlternativeIdeaLossNoLocality
     if use_slim_model:
         loss = AlternativeIdeaLossNoLocality(
             lambda_rec_spot=loss_weights["lambda_rec_spot"],
@@ -336,25 +327,7 @@ def alternative_idea_compute_mapping(
             leiden_n_clusters=leiden_n_clusters,
         )
     else:
-        loss = AlternativeIdeaLoss(
-            lambda_rec_spot=loss_weights["lambda_rec_spot"],
-            lambda_rec_gene=loss_weights["lambda_rec_gene"],
-            lambda_rec_state=loss_weights["lambda_rec_state"],
-            lambda_clust=loss_weights["lambda_clust"],
-            lambda_state_entropy=loss_weights["lambda_state_entropy"],
-            lambda_spot_entropy=loss_weights["lambda_spot_entropy"],
-            lambda_soft_modularity=loss_weights.get("lambda_soft_modularity", 0.0),
-            lambda_soft_contingency=loss_weights.get("lambda_soft_contingency", 0.0),
-            normalize_by_initial=True,
-            warmup_iters=1,
-            k=model_config["K"],
-            use_cm=bool(training_config["use_cm"]),
-            knn_W=knn_W,
-            knn_k=knn_k,
-            knn_two_m=knn_two_m,
-            leiden_labels=leiden_labels,
-            leiden_n_clusters=leiden_n_clusters,
-        )
+        raise Exception("not available")
 
     optimizer = optim.Adam(model.parameters(), lr=training_config["lr"])
 

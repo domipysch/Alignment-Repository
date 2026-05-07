@@ -16,7 +16,8 @@ from scipy.optimize import linear_sum_assignment
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics.pairwise import cosine_similarity
 
-from ._utils import _dense_X
+from ..utils import _dense_X
+from ..pre_check.metric import zscored_centroids as _zscored_centroids
 
 logger = logging.getLogger(__name__)
 
@@ -24,15 +25,6 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────────────
 # Centroid cosine matching (Hungarian + greedy)
 # ──────────────────────────────────────────────────────────────────────────────
-
-
-def _zscored_centroids(X: np.ndarray, labels: np.ndarray) -> np.ndarray:
-    """Per-cluster mean centroids, z-scored within each centroid (row-wise)."""
-    unique = sorted(np.unique(labels))
-    C = np.stack([X[labels == k].mean(axis=0) for k in unique])
-    std = C.std(axis=1, keepdims=True)
-    std[std == 0] = 1.0
-    return (C - C.mean(axis=1, keepdims=True)) / std
 
 
 def compute_leiden_vs_computed_matching(

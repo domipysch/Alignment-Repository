@@ -1,15 +1,60 @@
-from pathlib import Path
 from typing import Dict
 from .spatial_graph import SpatialGraphType
-import anndata as ad
+import numpy as np
 import pandas as pd
 import logging
 import json
 import torch
-from ...utils.io import load_sc_adata, load_st_adata
+import scanpy as sc
+from anndata import AnnData
 import matplotlib.pyplot as plt
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Low-level array helpers (shared across training and evaluate_k)
+# ---------------------------------------------------------------------------
+
+
+def _to_numpy(matrix: "torch.Tensor | np.ndarray") -> np.ndarray:
+    if isinstance(matrix, torch.Tensor):
+        return matrix.detach().cpu().numpy()
+    return np.asarray(matrix)
+
+
+def _dense_X(adata: AnnData) -> np.ndarray:
+    X = adata.X
+    if hasattr(X, "toarray"):
+        X = X.toarray()
+    return np.array(X, dtype=np.float32)
+
+
+def hard_assignments(matrix: "torch.Tensor | np.ndarray") -> np.ndarray:
+    """Row-wise argmax → shape (N,)."""
+    return _to_numpy(matrix).argmax(axis=1)
+
+
+# ---------------------------------------------------------------------------
+# Shared scanpy PCA + neighbors pipeline
+# ---------------------------------------------------------------------------
+
+
+def run_pca_neighbors_umap(
+    adata: AnnData,
+    n_comps: int = 30,
+    n_neighbors: int = 15,
+) -> None:
+    """In-place: optional normalize/log1p → PCA → neighbors → optional UMAP."""
+
+    # Normalize before computing PCAs
+    sc.pp.normalize_total(adata, target_sum=1e4)
+    sc.pp.log1p(adata)
+
+    n = min(n_comps, adata.n_obs - 1, adata.n_vars - 1)
+    sc.pp.pca(adata, n_comps=n)
+    sc.pp.neighbors(adata, n_neighbors=n_neighbors, use_rep="X_pca")
+    sc.tl.umap(adata)
 
 
 def build_sc_knn_graph(
@@ -68,45 +113,6 @@ def build_sc_knn_graph(
         f"2m={two_m:.0f}, PCA={n_components} dims"
     )
     return W, k, two_m
-
-
-def compute_leiden_overclustering(
-    adata_sc,
-    leiden_resolution: float = 2.0,
-    device=None,
-) -> tuple[torch.Tensor, int]:
-    """
-    Run a fine Leiden over-clustering on the sc data (once, before training).
-    Returns integer cluster labels per cell and the total number of clusters L.
-
-    The resolution should be tuned so that L ≈ 3*K (three times the number of
-    cell states K). Check the logged output to verify.
-
-    Args:
-        adata_sc          : raw AnnData object for scRNA-seq (not modified)
-        leiden_resolution : Leiden resolution — higher = more clusters
-        device            : torch device for the output label tensor
-
-    Returns:
-        leiden_labels : integer tensor (C,) with values in [0, L)
-        L             : number of Leiden clusters found
-    """
-    import scanpy as sc
-
-    adata = adata_sc.copy()
-    n_comps = min(50, adata.n_obs - 1, adata.n_vars - 1)
-    sc.pp.pca(adata, n_comps=n_comps)
-    sc.pp.neighbors(adata, n_neighbors=15, use_rep="X_pca")
-    sc.tl.leiden(adata, resolution=leiden_resolution, key_added="_leiden_overclust")
-
-    labels_np = adata.obs["_leiden_overclust"].astype(int).values
-    L = int(labels_np.max()) + 1
-    leiden_labels = torch.tensor(labels_np, dtype=torch.long, device=device)
-
-    logger.info(
-        f"Leiden over-clustering: resolution={leiden_resolution}, L={L} clusters"
-    )
-    return leiden_labels, L
 
 
 def fmt_nonzero_4(x: float) -> str:

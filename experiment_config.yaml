@@ -35,7 +35,7 @@ training:
     - false
   use_cm:
     - true
-  leiden_resolution_overclustering: 2.0
+  reference_leiden_clustering_resolution: 2.0
 loss_weights:
   - lambda_rec_spot: 1.0
     lambda_rec_gene: 0

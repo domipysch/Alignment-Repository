@@ -37,18 +37,21 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import scanpy as sc
 import torch
 from anndata import AnnData
 
-from ._utils import _to_numpy, _prepare_for_umap, hard_assignments
+from ..utils import _to_numpy, run_pca_neighbors_umap, hard_assignments
 from .assignments import (
     save_cell_mapping_csv,
     save_spot_mapping_csv,
     cell_state_fractions,
     cell_state_anndata,
 )
-from .clustering import compute_all_metrics, run_leiden_shared_genes
+from .clustering import (
+    compute_all_metrics,
+    run_leiden_clustering,
+    run_leiden_shared_genes,
+)
 from .matching import (
     compute_leiden_vs_computed_matching,
     plot_centroid_matching_heatmap,
@@ -58,7 +61,6 @@ from .matching import (
 )
 from .plots import (
     plot_umap_comparison,
-    plot_crosstab_heatmap,
     plot_state_profiles,
     plot_state_fractions,
     plot_gep_distance_comparison,
@@ -73,12 +75,8 @@ def run_analysis(
     B: torch.Tensor | np.ndarray,
     C: torch.Tensor | np.ndarray,
     output_dir: Path,
-    K: int | None = None,
-    leiden_resolution: float = 0.5,
-    leiden_resolution_fine: float = 2.0,  # kept for API compatibility, no longer used
-    normalize: bool = True,
-    gt_label_key: str | None = None,
-    max_auc_iter: int = 50,  # kept for API compatibility, AUC matching disabled
+    leiden_resolution: float,
+    K: int,
 ) -> dict:
     """
     Full post-mapping analysis pipeline.
@@ -92,15 +90,6 @@ def run_analysis(
     output_dir       : Directory where all outputs are written (created if absent).
     K                : Number of cell states (inferred from B if None).
     leiden_resolution     : Resolution for the main Leiden reference clusterings.
-    leiden_resolution_fine: Unused (kept for backwards-compatible call sites).
-    max_auc_iter         : Maximum refinement iterations for AUC matching.
-    normalize        : If True, normalize_total + log1p the working copy before
-                       UMAP / metrics.  Set False if adata_sc is already
-                       log-normalised.
-    gt_label_key     : obs column name with ground-truth cell-type labels (e.g.
-                       "cellType").  When provided, a crosstab heatmap of
-                       predicted state × GT label is saved.  Silently skipped if
-                       the column is absent from adata_sc.obs.
 
     Returns
     -------
@@ -124,8 +113,6 @@ def run_analysis(
 
     B = _to_numpy(B)
     C = _to_numpy(C)
-    if K is None:
-        K = B.shape[1]
 
     shared_genes = list(set(adata_sc.var_names) & set(adata_st.var_names))
     logger.info(
@@ -162,7 +149,8 @@ def run_analysis(
     logger.info("Cell-state profiles → %s", state_h5ad)
 
     # ── Prepare sc data once (normalise, PCA, neighbors, UMAP) ───────────────
-    adata_processed = _prepare_for_umap(adata_sc, normalize=normalize)
+    adata_processed = adata_sc.copy()
+    run_pca_neighbors_umap(adata_processed)
 
     # ── Computed clustering metrics ───────────────────────────────────────────
     logger.info("Computing metrics for the computed clustering…")
@@ -171,13 +159,7 @@ def run_analysis(
     adata_processed.obs["computed_state"] = pd.Categorical(cell_states.astype(str))
 
     # ── Leiden reference – all genes ─────────────────────────────────────────
-    logger.info(
-        "Running Leiden clustering – all genes (resolution=%.2f)…", leiden_resolution
-    )
-    sc.tl.leiden(adata_processed, resolution=leiden_resolution, key_added="_leiden_ref")
-    leiden_labels = adata_processed.obs["_leiden_ref"].astype(int).values
-    logger.info("Leiden (all genes): %d clusters", len(np.unique(leiden_labels)))
-
+    leiden_labels, _ = run_leiden_clustering(adata_sc, resolution=leiden_resolution)
     metrics_leiden = compute_all_metrics(adata_processed, leiden_labels)
     logger.info("Leiden (all genes): %s", metrics_leiden)
     adata_processed.obs["leiden_state"] = pd.Categorical(leiden_labels.astype(str))
@@ -187,11 +169,11 @@ def run_analysis(
         "Running Leiden clustering – shared genes (resolution=%.2f)…", leiden_resolution
     )
     leiden_shared_labels, adata_shared = run_leiden_shared_genes(
-        adata_processed,
+        adata_sc,
         shared_genes=shared_genes,
         resolution=leiden_resolution,
     )
-    metrics_leiden_shared = compute_all_metrics(adata_shared, leiden_shared_labels)
+    metrics_leiden_shared = compute_all_metrics(adata_processed, leiden_shared_labels)
     logger.info("Leiden (shared genes): %s", metrics_leiden_shared)
 
     adata_processed.obs["leiden_shared_state"] = pd.Categorical(
@@ -227,21 +209,6 @@ def run_analysis(
         ],
         output_path=output_dir / "umap_comparison.png",
     )
-
-    # ── Crosstab heatmap ──────────────────────────────────────────────────────
-    if gt_label_key is not None:
-        if gt_label_key in adata_sc.obs.columns:
-            plot_crosstab_heatmap(
-                cell_states,
-                adata_sc.obs[gt_label_key].values,
-                output_dir / "crosstab_heatmap.png",
-                gt_label_name=gt_label_key,
-            )
-        else:
-            logger.warning(
-                "gt_label_key=%r not found in adata_sc.obs — skipping crosstab.",
-                gt_label_key,
-            )
 
     # ── Cell-state profiles ───────────────────────────────────────────────────
     logger.info("Plotting cell-state profiles…")

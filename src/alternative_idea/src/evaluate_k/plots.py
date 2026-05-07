@@ -12,7 +12,7 @@ import pandas as pd
 import scanpy as sc
 from anndata import AnnData
 
-from ._utils import _dense_X
+from ..utils import _dense_X
 from sklearn.metrics.pairwise import cosine_distances
 
 logger = logging.getLogger(__name__)

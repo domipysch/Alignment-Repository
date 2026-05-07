@@ -126,10 +126,6 @@ def _read_median_cossim(
 
 def main(
     result_folder: Path,
-    leiden_resolution: float = 0.5,
-    leiden_resolution_fine: float = 2.0,
-    normalize: bool = True,
-    max_auc_iter: int = 50,
     metrics_folder: Path | None = None,
 ) -> None:
     result_folder = Path(result_folder)
@@ -140,6 +136,9 @@ def main(
     exp_cfg = _load_experiment_config(pair_dir)
     sc_path = Path(exp_cfg["data"]["sc_paths"][0])
     st_path = Path(exp_cfg["data"]["st_paths"][0])
+    leiden_resolution: float = float(
+        exp_cfg.get("training", {}).get("reference_leiden_clustering_resolution")
+    )
 
     logger.info("Loading sc data from %s", sc_path)
     adata_sc = ad.read_h5ad(sc_path)
@@ -183,9 +182,6 @@ def main(
             output_dir=output_dir,
             K=K,
             leiden_resolution=leiden_resolution,
-            leiden_resolution_fine=leiden_resolution_fine,
-            normalize=normalize,
-            max_auc_iter=max_auc_iter,
         )
         logger.info("Run %s done → %s", run_dir.name, output_dir)
 
@@ -236,29 +232,6 @@ if __name__ == "__main__":
         help="Result folder produced by run_experiment.py",
     )
     parser.add_argument(
-        "--leiden_resolution",
-        type=float,
-        default=0.5,
-        help="Resolution for the Leiden reference clustering (default: 0.5)",
-    )
-    parser.add_argument(
-        "--leiden_resolution_fine",
-        type=float,
-        default=2.0,
-        help="Resolution for the fine Leiden used in contingency matching (default: 2.0)",
-    )
-    parser.add_argument(
-        "--max_auc_iter",
-        type=int,
-        default=50,
-        help="Maximum refinement iterations for AUC matching (default: 50)",
-    )
-    parser.add_argument(
-        "--no_normalize",
-        action="store_true",
-        help="Skip normalize_total + log1p (use if adata_sc is already log-normalised)",
-    )
-    parser.add_argument(
         "--metrics_folder",
         type=Path,
         default=None,
@@ -274,9 +247,5 @@ if __name__ == "__main__":
 
     main(
         result_folder=args.result_folder,
-        leiden_resolution=args.leiden_resolution,
-        leiden_resolution_fine=args.leiden_resolution_fine,
-        normalize=not args.no_normalize,
-        max_auc_iter=args.max_auc_iter,
         metrics_folder=args.metrics_folder,
     )

@@ -201,11 +201,11 @@ def run_analysis(
         adata_processed,
         panels=[
             ("computed_state", "Computed cell-state assignment"),
+            ("leiden_state", f"Leiden – all genes (resolution={leiden_resolution})"),
             (
                 "leiden_shared_state",
                 f"Leiden – shared genes (resolution={leiden_resolution})",
             ),
-            ("leiden_state", f"Leiden – all genes (resolution={leiden_resolution})"),
         ],
         output_path=output_dir / "umap_comparison.png",
     )

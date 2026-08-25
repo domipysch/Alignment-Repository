@@ -66,7 +66,7 @@ dev = [
 aim = "aim.cli:main"
 
 [project.urls]
-Repository = "https://github.com/domi1504/AIM"
+Repository = "https://github.com/domipysch/AIM"
 
 [tool.setuptools.packages.find]
 where = ["src"]
